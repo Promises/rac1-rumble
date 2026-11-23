@@ -24,6 +24,11 @@ constexpr std::uint32_t kWrenchHit = 0xA64u;
 // Hero.items[0].item_id: the item in hand, which use_ammo takes for its id -1
 // (g_hero_equipped_item_id, PAL D_00140508).
 constexpr std::uint32_t kItemInHand = 0x10B8u;
+// Hero.anim_frame and anim_frame_delta: his animation's frame now and how far it moved this tick
+// (test_hero_animation_frame_window: a frame T is passed this tick when T < frame and
+// frame - T <= delta).
+constexpr std::uint32_t kAnimFrame = 0xAA8u;
+constexpr std::uint32_t kAnimFrameDelta = 0xAACu;
 // Hero.state.current.
 constexpr std::uint32_t kHeroState = 0x2084u;
 // Hero.vehicle_mode: non-zero as Clank or Giant Clank.
@@ -53,6 +58,30 @@ constexpr std::int32_t kDyingStates[] = {
     0x80,  // DYING_SPEED_LIMITED
     0x82,  // DYING_ZERO_HEALTH
 };
+
+// The jumps Going Commando kicks the pad for as it enters them (its hero_set_action calls its
+// pattern player for the same three states, whose entries match Ratchet & Clank's number for
+// number: the same heights, frames and trails), and Ratchet & Clank's entries:
+//   0xD   a jump with a trail and keyed velocity, as the long jump has (entered from code
+//         rac1-decomp has not decompiled; Going Commando's pattern 20)
+//   0x10  the Thruster-Pack's long jump, HERO_STATE_PACK_LONG_JUMP (pattern 20)
+//   0x11  the wall jump, from a landing in the wall-jump window (pattern 27)
+constexpr std::int32_t kPackJumpStates[] = {0xD, 0x10};
+constexpr std::int32_t kWallJump = 0x11;
+
+// The wrench slam (HERO_STATE_WRENCH_SLAM), and the frame of its animation where wrench_update
+// strikes the ground (its impact effects; Going Commando's pattern 25 and a camera shake at the
+// same point of its own slam, state 0x14 too).
+constexpr std::int32_t kWrenchSlam = 0x14;
+constexpr float kSlamImpactFrame = 27.0f;
+
+// Held up by a pack: the Thruster-Pack's hover (0x81) and the Heli-Pack's glide (0x8, named LAND in
+// rac1-decomp's enum: entered with X held in the air with the Heli-Pack, in the hover's pose).
+constexpr std::int32_t kHoverStates[] = {0x8, 0x81};
+
+// The Hydro-Pack's dash under water (0x35: R1 or R2 with the swim stroke and the Hydro-Pack;
+// Going Commando's 0x34, pattern 22 each tick it lasts).
+constexpr std::int32_t kSwimDash = 0x35;
 
 // On a rail.
 constexpr std::int32_t kGrindStates[] = {

@@ -59,6 +59,14 @@ rumble::Frame read_frame(const Memory& m, const Disc& disc, bool playing, std::u
     const std::int32_t state = m.template read<std::int32_t>(hero + kHeroState);
     f.dead = m.template read<std::int32_t>(hero + kHealth) <= 0 || one_of(state, kDyingStates);
     f.grinding = one_of(state, kGrindStates);
+    f.hovering = one_of(state, kHoverStates);
+    f.swim_dash = state == kSwimDash;
+    if (state == kWrenchSlam) {
+        // test_hero_animation_frame_window(27), as wrench_update asks it for the slam's impact.
+        const float frame = m.template read<float>(hero + kAnimFrame);
+        const float delta = m.template read<float>(hero + kAnimFrameDelta);
+        f.slam = kSlamImpactFrame < frame && frame - kSlamImpactFrame <= delta;
+    }
     f.airborne = m.template read<std::int16_t>(hero + kAirFrames) > 0;
     f.soft = one_of(state, kSoftLandingStates) || m.template read<std::uint8_t>(hero + kVehicleMode) != 0;
     const float vz = m.template read<float>(hero + kVelocityZ);

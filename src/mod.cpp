@@ -9,9 +9,11 @@
 //   rac1.weapon.take_ammo     a shot: the ammo taken, by the weapon in hand
 //   rac1.moby.wrench.update   the wrench's hit latch set during its update: it connected
 //   rac1.moby.record_death    an enemy killed, a crate broken
+//   rac1.player.enter_move_state  a state taken: the Thruster-Pack's long jump, the wall jump
 // and after each tick (on_frame): the game's phase (play_status: rumble only in play, not paused, in
-// a menu or a scene), the hero (dying, on a rail, landing after a long fall) and the camera's shake
-// (explosions, quakes, anything that shakes it), then the motors (set_motors, interface 1.37).
+// a menu or a scene), the hero (dying, landing after a long fall, the wrench slam striking, on a
+// rail, the Hydro-Pack's dash, a pack's hover) and the camera's shake (explosions, quakes, anything
+// that shakes it), then the motors (set_motors, interface 1.37).
 // Each hook point is optional: a disc without one plays the rest.
 #include <cstdint>
 #include <string>
@@ -47,6 +49,8 @@ rumble::Settings read_settings(const openrac::Mod& mod) {
     s.weapons = mod.setting<bool>("weapons");
     s.explosions = mod.setting<bool>("explosions");
     s.grind = mod.setting<bool>("grind");
+    s.jumps = mod.setting<bool>("jumps");
+    s.hover = mod.setting<bool>("hover");
     return s;
 }
 
@@ -130,6 +134,19 @@ void load(openrac::Mod& mod) {
             state().rumble.kill();
         },
         "kills and crates");
+
+    // The state as taken: a jump refused (its lock) puts the last state back and answers 0.
+    hook<rac1::Hero_EnterMoveState>(
+        mod,
+        [](auto original, std::int32_t asked, std::int32_t force) -> std::int32_t {
+            const std::int32_t took = original(asked, force);
+            if (took != 0 &&
+                state().mod->memory().read<std::int32_t>(state().disc.hero + rr::kHeroState) == asked) {
+                state().rumble.jumped(asked);
+            }
+            return took;
+        },
+        "jumps");
 
     mod.on_frame([] { tick(); });
 

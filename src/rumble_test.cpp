@@ -198,7 +198,8 @@ void test_every_pattern_ends() {
     const rumble::Pattern* all[] = {
         &rumble::patterns::kHurt,       &rumble::patterns::kHurtHeavy,  &rumble::patterns::kDeath,
         &rumble::patterns::kWrench,     &rumble::patterns::kKill,       &rumble::patterns::kShotLight,
-        &rumble::patterns::kShotMedium, &rumble::patterns::kShotHeavy,
+        &rumble::patterns::kShotMedium, &rumble::patterns::kShotHeavy,  &rumble::patterns::kPackJump,
+        &rumble::patterns::kWallJump,   &rumble::patterns::kSlam,
     };
     for (const auto* p : all) {
         for (float tick : {1.0f / 50.0f, 1.0f / 60.0f}) {
@@ -308,16 +309,20 @@ void test_death_jolts_then_silence() {
 
 void test_toggles() {
     Settings s;
-    s.damage = s.melee = s.weapons = s.explosions = s.grind = s.landings = false;
+    s.damage = s.melee = s.weapons = s.explosions = s.grind = s.landings = s.jumps = s.hover = false;
     Rumble r = started(s);
     r.hurt(3);
     r.wrench_hit();
     r.kill();
     r.weapon_fired(0x0B);
     r.weapon_fired(0x10);
+    r.jumped(0x10);
     Frame f = play();
     f.shake = 0.3f;
     f.grinding = true;
+    f.swim_dash = true;
+    f.hovering = true;
+    f.slam = true;
     check(!r.tick(f).send, "every toggle off: nothing");
     Rumble on = started();
     on.wrench_hit();
@@ -393,6 +398,106 @@ void test_grind() {
     check(on == 120, "a rail rattles each tick");
     const Run tail = run(r, play());
     check(tail.stopped && tail.on == 0, "off the rail it stops at once, and no landing thud from the rail");
+}
+
+void test_jumps() {
+    Rumble long_jump = started();
+    long_jump.jumped(0x10);
+    const Run a = run(long_jump, play());
+    check(a.on >= 6 && a.on <= 9 && a.peak >= 130 && a.stopped, "the Thruster-Pack's long jump: a short kick");
+    Rumble flip = started();
+    flip.jumped(0xD);
+    check(run(flip, play()).peak == a.peak, "state 0xD: the same kick (Going Commando's pattern 20 for both)");
+    Rumble wall = started();
+    wall.jumped(0x11);
+    const Run w = run(wall, play());
+    check(w.on > 0 && w.peak < a.peak, "a wall jump: a lighter kick");
+    for (std::int32_t plain : {0x7, 0x9, 0xA, 0xB, 0xE, 0x8, 0x81}) {
+        Rumble r = started();
+        r.jumped(plain);
+        check(!r.tick(play()).send, "an ordinary jump, a double jump, a pack's glide: no kick");
+    }
+    Settings off;
+    off.jumps = false;
+    Rumble o = started(off);
+    o.jumped(0x10);
+    check(!o.tick(play()).send, "jumps off: no kick");
+    Rumble paused;
+    paused.set_tick(kTick);
+    Frame menu = play();
+    menu.playing = false;
+    paused.tick(menu);
+    paused.jumped(0x10);
+    check(!paused.tick(play()).send, "a jump reported out of play: no kick");
+    Rumble dead = started();
+    Frame d = play();
+    d.dead = true;
+    run(dead, d);
+    dead.jumped(0x10);
+    check(!dead.tick(d).send, "dead: no kick");
+}
+
+void test_slam() {
+    Rumble r = started();
+    Frame f = play();
+    f.slam = true;
+    const Motors first = r.tick(f);
+    const Run rest = run(r, play());
+    check(first.send && first.small == 1 && rest.peak >= 200 && rest.on >= 12 && rest.stopped,
+          "the wrench slam striking: a thump on both motors");
+    Settings off;
+    off.melee = false;
+    Rumble o = started(off);
+    check(!o.tick(f).send, "wrench and kills off: no thump");
+}
+
+// Ticks `r` `ticks` times in `frame`; how many sent the large motor on.
+int held(Rumble& r, const Frame& frame, int ticks) {
+    int on = 0;
+    for (int i = 0; i < ticks; ++i) {
+        const Motors m = r.tick(frame);
+        on += m.send && m.large > 0 ? 1 : 0;
+    }
+    return on;
+}
+
+void test_hover() {
+    Frame f = play();
+    f.hovering = true;
+    Rumble quiet = started();
+    check(held(quiet, f, 50) == 0, "the hover hum is off by default");
+    Settings on;
+    on.hover = true;
+    Rumble r = started(on);
+    check(held(r, f, 600) == 600, "on: it hums every tick the pack holds him up");
+    const Motors left = r.tick(play());
+    check(left.send && left.large == 0 && left.small == 0, "and stops the tick he leaves it");
+    check(!r.tick(play()).send, "once");
+    Rumble faint = started(on);
+    int peak = 0;
+    for (int i = 0; i < 50; ++i) {
+        peak = std::max(peak, faint.tick(f).large);
+    }
+    check(peak > 0 && peak <= 30, "a faint hum, never the small motor");
+    Rumble with_hit = started(on);
+    with_hit.tick(f);
+    with_hit.hurt(3);
+    Rumble alone = started();
+    alone.hurt(3);
+    check(with_hit.tick(f).large == alone.tick(play()).large, "a hit while hovering is as strong as alone");
+}
+
+void test_swim_dash() {
+    Frame f = play();
+    f.swim_dash = true;
+    Rumble r = started();
+    check(held(r, f, 100) == 100, "the Hydro-Pack's dash pushes every tick");
+    const Motors left = r.tick(play());
+    check(left.send && left.large == 0, "and stops the tick it ends");
+    Settings off;
+    off.grind = false;
+    Rumble o = started(off);
+    check(held(o, f, 10) == 0, "rails and swimming off: nothing");
 }
 
 // A fall of `ticks` ticks at `speed` units a second, then a landing in `landed`.
@@ -498,6 +603,28 @@ void test_read_frame() {
     check(read_frame(m, disc, true, 0).soft, "as Clank: no landing thuds");
     m.write<std::uint8_t>(disc.hero + kVehicleMode, 0);
 
+    m.write<std::int32_t>(disc.hero + kHeroState, 0x81);
+    check(read_frame(m, disc, true, 0).hovering, "state 0x81: the Thruster-Pack's hover");
+    m.write<std::int32_t>(disc.hero + kHeroState, 0x8);
+    check(read_frame(m, disc, true, 0).hovering, "state 0x8: the Heli-Pack's glide");
+    m.write<std::int32_t>(disc.hero + kHeroState, 0x35);
+    f = read_frame(m, disc, true, 0);
+    check(f.swim_dash && !f.hovering, "state 0x35: the Hydro-Pack's dash");
+
+    // The slam: frame 27 passed this tick (26.6 -> 27.4: delta 0.8) strikes; before it or a tick
+    // later not.
+    m.write<std::int32_t>(disc.hero + kHeroState, 0x14);
+    m.write<float>(disc.hero + kAnimFrame, 27.4f);
+    m.write<float>(disc.hero + kAnimFrameDelta, 0.8f);
+    check(read_frame(m, disc, true, 0).slam, "the slam's animation passing frame 27: it strikes");
+    m.write<float>(disc.hero + kAnimFrame, 28.2f);
+    check(!read_frame(m, disc, true, 0).slam, "a tick later: no second strike");
+    m.write<float>(disc.hero + kAnimFrame, 26.6f);
+    check(!read_frame(m, disc, true, 0).slam, "before frame 27: not yet");
+    m.write<std::int32_t>(disc.hero + kHeroState, 0x13);
+    m.write<float>(disc.hero + kAnimFrame, 27.4f);
+    check(!read_frame(m, disc, true, 0).slam, "frame 27 of another attack: no slam");
+
     m.write<std::int32_t>(disc.hero + kHeroState, 0x3D);
     check(read_frame(m, disc, true, 0).dead, "state 0x3D: dying");
     m.write<std::int32_t>(disc.hero + kHeroState, 0x0);
@@ -553,6 +680,10 @@ int main() {
     test_stream_holds_while_firing();
     test_continuous_does_not_halve_a_hit();
     test_grind();
+    test_jumps();
+    test_slam();
+    test_hover();
+    test_swim_dash();
     test_landings();
     test_camera_shake();
     test_read_frame();

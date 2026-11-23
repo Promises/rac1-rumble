@@ -9,7 +9,7 @@
 // The waves play on Going Commando's own mixer, LevelActuatorCalcPower (actuator.c, copied; Ratchet
 // & Clank's actuator_CalcPower with permanent channels), in two banks of its eight channels: one
 // for the short events, each wave counting its duration down, and one for what lasts (a stream
-// weapon held, a rail ground), a permanent wave started as it starts and emptied as it stops. The
+// weapon held, a rail ground, the Hydro-Pack's dash, a pack's hover), a permanent wave started as it starts and emptied as it stops. The
 // mixer averages the waves on a motor, so a buzz in the events' bank would halve a hit; the two
 // banks and the camera's shake are put together by the stronger instead.
 #pragma once
@@ -82,6 +82,18 @@ constexpr Pattern kStreamTesla{{{{Wave::kLoop, kLarge, 60, 0.0f, 0.0f, 0.05f, 25
 constexpr Pattern kStreamBeam{{{{Wave::kLoop, kLarge, 25, 0.0f, 0.0f, 0.30f, 25}}}, 1};
 // On a rail, permanent while he grinds: a low, fast rattle.
 constexpr Pattern kGrind{{{{Wave::kLoop, kLarge, 22, 0.0f, 0.0f, 0.12f, 22}}}, 1};
+// The Hydro-Pack's dash, permanent while it lasts (Going Commando plays its pattern 22 each tick
+// of its own): a steady push.
+constexpr Pattern kSwimDash{{{{Wave::kLoop, kLarge, 30, 0.0f, 0.0f, 0.20f, 40}}}, 1};
+// Held up by the Thruster-Pack or the Heli-Pack: a faint hum (Going Commando has none).
+constexpr Pattern kHover{{{{Wave::kLoop, kLarge, 10, 0.0f, 0.0f, 0.25f, 18}}}, 1};
+// A pack's jump starting (the Thruster-Pack's long jump; Going Commando's pattern 20): a kick.
+constexpr Pattern kPackJump{{{{Wave::kFade, kLarge, 150, 0.15f}, {Wave::kPulse, kSmall, 255, 0.05f}}}, 2};
+// A wall jump (Going Commando's pattern 27): a lighter kick.
+constexpr Pattern kWallJump{{{{Wave::kFade, kLarge, 120, 0.12f}}}, 1};
+// The wrench slam striking the ground (Going Commando's pattern 25, with a camera shake): a thump,
+// between a hit taken and the heaviest shot.
+constexpr Pattern kSlam{{{{Wave::kEase, kLarge, 230, 0.30f}, {Wave::kPulse, kSmall, 255, 0.10f}}}, 2};
 
 }  // namespace patterns
 
@@ -301,6 +313,8 @@ struct Settings {
     bool weapons = true;
     bool explosions = true;
     bool grind = true;
+    bool jumps = true;
+    bool hover = false;
 };
 
 // What the game is doing this tick (game.hpp reads it).
@@ -311,6 +325,12 @@ struct Frame {
     bool dead = false;
     // On a rail.
     bool grinding = false;
+    // Held up by the Thruster-Pack's hover or the Heli-Pack's glide.
+    bool hovering = false;
+    // The Hydro-Pack's dash under water.
+    bool swim_dash = false;
+    // The wrench slam struck the ground this tick.
+    bool slam = false;
     // Feet off the ground.
     bool airborne = false;
     // Where he is takes no thud from a landing (water, a ledge caught, as Clank).
@@ -366,6 +386,19 @@ public:
     void wrench_hit() {
         if (taking() && m_settings.melee) {
             m_events.start(patterns::kWrench, m_tick);
+        }
+    }
+
+    // The hero entered move state `state` (enter_move_state took it): the pack's jumps and the wall
+    // jump kick.
+    void jumped(std::int32_t state) {
+        if (!taking() || !m_settings.jumps) {
+            return;
+        }
+        if (state == 0xD || state == 0x10) {
+            m_events.start(patterns::kPackJump, m_tick);
+        } else if (state == 0x11) {
+            m_events.start(patterns::kWallJump, m_tick);
         }
     }
 
@@ -426,7 +459,12 @@ public:
         }
         if (!m_dead) {
             land(frame);
-            grind(frame.grinding && m_settings.grind);
+            if (frame.slam && m_settings.melee) {
+                m_events.start(patterns::kSlam, m_tick);
+            }
+            hold(kGrindTag, frame.grinding && m_settings.grind, patterns::kGrind);
+            hold(kSwimTag, frame.swim_dash && m_settings.grind, patterns::kSwimDash);
+            hold(kHoverTag, frame.hovering && m_settings.hover, patterns::kHover);
             if (m_stream_item >= 0 && (!m_settings.weapons || m_ticks - m_stream_tick > m_stream_hold)) {
                 end_stream();
             }
@@ -461,7 +499,9 @@ public:
 
 private:
     static constexpr int kGrindTag = 1;
-    // A stream weapon's tag: its item, past the grind's.
+    static constexpr int kSwimTag = 2;
+    static constexpr int kHoverTag = 3;
+    // A stream weapon's tag: its item, past the others.
     static constexpr int kStreamTag = 0x100;
 
     // Events count only in play, with the hero alive.
@@ -476,12 +516,13 @@ private:
         m_stream_item = -1;
     }
 
-    // The rail's permanent rattle on or off.
-    void grind(bool on) {
-        if (on && !m_continuous.has(kGrindTag)) {
-            m_continuous.start(patterns::kGrind, m_tick, kGrindTag);
+    // A permanent wave for as long as `on` holds: started the tick it turns on, stopped the tick
+    // it turns off.
+    void hold(int tag, bool on, const Pattern& pattern) {
+        if (on && !m_continuous.has(tag)) {
+            m_continuous.start(pattern, m_tick, tag);
         } else if (!on) {
-            m_continuous.stop(kGrindTag);
+            m_continuous.stop(tag);
         }
     }
 
