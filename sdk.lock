@@ -1,0 +1,6 @@
+{
+  "about": "The OpenRAC mod SDK this mod builds against: tools/fetch_sdk.py puts it in .sdk/, where CMakeLists.txt finds it. The mod needs interface 1.37 (set_motors), which no OpenRAC release or develop has yet: it comes with the sdk-set-motors branch of Promises/OpenRAC, stacked on sdk-sharp-cells (OpenRAC #803, 1.36). Until that branch is pushed this lock names sdk-sharp-cells' commit, and fetch_sdk.py stops with 'the SDK at 9d26022a4 is 1.36.0, sdk.lock says 1.37.0'; then its commit goes here, and later a release's url and sha256.",
+  "version": "1.37.0",
+  "git": "https://github.com/Promises/OpenRAC",
+  "commit": "9d26022a48eb9ee6b320e6f3b67d218399c4182d"
+}
