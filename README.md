@@ -4,18 +4,14 @@
 
 A native mod for [OpenRAC](https://github.com/OpenRAC/OpenRAC)'s port of Ratchet & Clank:
 **controller rumble in the style of Going Commando**. Ratchet & Clank has a vibration mixer, but the
-retail game never drives the pad's motors; Going Commando does, for hits, hard landings, explosions
-and its weapons. This mod plays rumble for the same kind of moments in Ratchet & Clank, on Going
+retail game never drives the pad's motors; Going Commando does, for hits, jumps, the wrench slam,
+its weapons and its vehicles. This mod plays rumble for the same kind of moments in Ratchet & Clank, on Going
 Commando's own mixer, copied from its decompilation. PAL and NTSC-U.
 
 ## What rumbles
 
 - **Hits taken**: a jolt that eases off over a third of a second, both motors; a heavier hit (the
   game's damage 2 or more) is stronger and longer. Dying: a long jolt, then nothing.
-- **Hard landings**: after a long, fast fall (0.6 seconds or more coming down, at 12 units a second
-  or faster), a thud on the large motor, stronger and longer the longer he fell, both motors from
-  about a second down. Ordinary jumps, double jumps and Heli-Pack glides land quietly, and so does a
-  fall that ends on a ledge or in water.
 - **Jumps**, where Going Commando kicks for its own: a short kick as the Thruster-Pack's long jump
   starts (and the jump that shares its kick in Going Commando, state 0xD), a lighter one for a wall
   jump. Ordinary jumps, high jumps and double jumps stay quiet, as in Going Commando.
@@ -44,7 +40,7 @@ In the launcher's Mods tab, read again whenever they change while the game runs:
 
 - **Strength** (0 to 100%, default 100): the large motor's strength scales; the small motor is only
   on or off, and drops out below about 40%.
-- **Hits taken**, **Hard landings**, **Jumps**, **Wrench and kills**, **Weapons**, **Explosions and
+- **Hits taken**, **Jumps**, **Wrench and kills**, **Weapons**, **Explosions and
   camera shake**, **Rails and swimming**: each on by default.
 - **Hover hum**: off by default.
 
@@ -84,7 +80,6 @@ Where the moments come from:
 |---|---|
 | Hits taken | `rac1.player.take_damage`, its damage |
 | Dying | the hero's state (dying, drowning, a fatal fall...) or no health, each tick |
-| Hard landings | the hero's time off the ground and his speed downward, each tick |
 | Jumps | `rac1.player.enter_move_state`: states 0x10 (the Thruster-Pack's long jump), 0xD and 0x11 (the wall jump) taken |
 | The wrench | `rac1.moby.wrench.update`: the wrench's hit latch (`Hero.unkA64`) set during its update |
 | The wrench slam | the hero in state 0x14 with his animation passing frame 27 this tick, where `wrench_update` strikes the ground |
@@ -117,12 +112,21 @@ this mod's, kept in the same order.
 | Oozla's ferry and the grabber (4, 5, 7, level patterns) | none | not here |
 | All patterns cleared as the hero changes state (unless a slam's lock holds them) | | not copied: patterns here run their length |
 
-Not Going Commando's (none of its decompiled code rumbles for them): hard landings, kills and crates, rails, the camera's shake followed as a
-level, the stream weapons' buzz, the hover hum.
+Not Going Commando's (none of its decompiled code rumbles for them): kills and crates, rails, the
+camera's shake followed as a level, the stream weapons' buzz, the hover hum. Landings stay quiet, as
+in Going Commando.
 
 The game has no hook point at its explosion spawn; explosions reach the rumble through the camera's
 shake, so one out of view (which shakes nothing) does not rumble. A hook point there would be an
 OpenRAC addition.
+
+## Next version
+
+Going Commando also rumbles in its vehicles: the hoverbike races (a rocket fired, a crash with its
+explosion) and space combat (the ship's weapons, its hits and collisions, boss parts). Ratchet &
+Clank's counterparts, the Hoverboard races and the ship fights (the fight with Quark's ship among
+them), need hook points or state reads this mod does not have yet; until then they rumble only
+through the camera's shake.
 
 ## Build
 

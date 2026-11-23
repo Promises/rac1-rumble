@@ -11,8 +11,8 @@
 //   rac1.moby.record_death    an enemy killed, a crate broken
 //   rac1.player.enter_move_state  a state taken: the Thruster-Pack's long jump, the wall jump
 // and after each tick (on_frame): the game's phase (play_status: rumble only in play, not paused, in
-// a menu or a scene), the hero (dying, landing after a long fall, the wrench slam striking, on a
-// rail, the Hydro-Pack's dash, a pack's hover) and the camera's shake (explosions, quakes, anything
+// a menu or a scene), the hero (dying, the wrench slam striking, on a rail, the Hydro-Pack's
+// dash, a pack's hover) and the camera's shake (explosions, quakes, anything
 // that shakes it), then the motors (set_motors, interface 1.37).
 // Each hook point is optional: a disc without one plays the rest.
 #include <cstdint>
@@ -44,7 +44,6 @@ rumble::Settings read_settings(const openrac::Mod& mod) {
     rumble::Settings s;
     s.strength = mod.setting<int>("strength");
     s.damage = mod.setting<bool>("damage");
-    s.landings = mod.setting<bool>("landings");
     s.melee = mod.setting<bool>("melee");
     s.weapons = mod.setting<bool>("weapons");
     s.explosions = mod.setting<bool>("explosions");

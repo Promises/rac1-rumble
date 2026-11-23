@@ -4,7 +4,7 @@
   "name": "Rumble",
   "version": "1.0.0",
   "author": "Henning Berge",
-  "description": "Controller rumble in the style of Going Commando, which Ratchet & Clank never had: hits taken, hard landings after long falls, the Thruster-Pack's long jump and wall jumps, wrench hits and the wrench slam, kills and broken crates, every weapon's shot (a steady buzz while the Pyrocitor, Tesla Claw or Morph-o-Ray fires), explosions and anything else that shakes the camera, rails and the Hydro-Pack's dash, and (off by default) a faint hum while a pack holds Ratchet up. The waves play on Going Commando's own vibration mixer, copied from its decompilation. Quiet in menus, scenes and while Ratchet is dead. Needs OpenRAC with mod interface 1.37.",
+  "description": "Controller rumble in the style of Going Commando, which Ratchet & Clank never had: hits taken, the Thruster-Pack's long jump and wall jumps, wrench hits and the wrench slam, kills and broken crates, every weapon's shot (a steady buzz while the Pyrocitor, Tesla Claw or Morph-o-Ray fires), explosions and anything else that shakes the camera, rails and the Hydro-Pack's dash, and (off by default) a faint hum while a pack holds Ratchet up. The waves play on Going Commando's own vibration mixer, copied from its decompilation. Quiet in menus, scenes and while Ratchet is dead. Needs OpenRAC with mod interface 1.37.",
   "license": "GPL-3.0-or-later AND GPL-3.0-only",
   "homepage": "https://github.com/Promises/rac1-rumble",
   "api": "1.37",
@@ -37,13 +37,6 @@
       "type": "bool",
       "default": true,
       "description": "A jolt for each hit Ratchet takes (stronger for a heavier one), and a long one as he dies."
-    },
-    {
-      "key": "landings",
-      "name": "Hard landings",
-      "type": "bool",
-      "default": true,
-      "description": "A thud on landing after a long, fast fall, stronger the longer he fell. Ordinary jumps and glides land quietly."
     },
     {
       "key": "jumps",

@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Henning Berge
 //
 // What the rumble needs of the game each tick (rumble::Frame), read from its memory: the hero's
-// state, health, air time and fall, and the level camera's shake. Memory is anything with
+// state, health and animation, and the level camera's shake. Memory is anything with
 // read<T>(address) (openrac::Memory in the game, a buffer in the tests).
 #pragma once
 
@@ -67,10 +67,6 @@ rumble::Frame read_frame(const Memory& m, const Disc& disc, bool playing, std::u
         const float delta = m.template read<float>(hero + kAnimFrameDelta);
         f.slam = kSlamImpactFrame < frame && frame - kSlamImpactFrame <= delta;
     }
-    f.airborne = m.template read<std::int16_t>(hero + kAirFrames) > 0;
-    f.soft = one_of(state, kSoftLandingStates) || m.template read<std::uint8_t>(hero + kVehicleMode) != 0;
-    const float vz = m.template read<float>(hero + kVelocityZ);
-    f.fall_speed = std::isfinite(vz) && vz < 0.0f ? -vz / f.tick : 0.0f;
     f.shake = camera_shake(m, shake);
     return f;
 }

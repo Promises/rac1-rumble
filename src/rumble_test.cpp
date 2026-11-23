@@ -338,7 +338,7 @@ void test_death_jolts_then_silence() {
 
 void test_toggles() {
     Settings s;
-    s.damage = s.melee = s.weapons = s.explosions = s.grind = s.landings = s.jumps = s.hover = false;
+    s.damage = s.melee = s.weapons = s.explosions = s.grind = s.jumps = s.hover = false;
     Rumble r = started(s);
     r.hurt(3);
     r.wrench_hit();
@@ -417,8 +417,6 @@ void test_grind() {
     Rumble r = started();
     Frame f = play();
     f.grinding = true;
-    f.airborne = true;  // the game may count him off the ground on a rail
-    f.fall_speed = 30.0f;
     int on = 0;
     for (int i = 0; i < 120; ++i) {
         const Motors m = r.tick(f);
@@ -426,7 +424,7 @@ void test_grind() {
     }
     check(on == 120, "a rail rattles each tick");
     const Run tail = run(r, play());
-    check(tail.stopped && tail.on == 0, "off the rail it stops at once, and no landing thud from the rail");
+    check(tail.stopped && tail.on == 0, "off the rail it stops at once");
 }
 
 void test_jumps() {
@@ -530,43 +528,6 @@ void test_swim_dash() {
     check(held(o, f, 10) == 0, "rails and swimming off: nothing");
 }
 
-// A fall of `ticks` ticks at `speed` units a second, then a landing in `landed`.
-Run fall(Rumble& r, int ticks, float speed, const Frame& landed) {
-    Frame air = play();
-    air.airborne = true;
-    air.fall_speed = speed;
-    for (int i = 0; i < ticks; ++i) {
-        r.tick(air);
-    }
-    return run(r, landed);
-}
-
-void test_landings() {
-    Rumble hard = started();
-    const Run a = fall(hard, 60, 25.0f, play());  // 1.2 s down
-    check(a.on > 10 && a.peak >= 200 && a.stopped, "a long fast fall lands with a thud");
-    Rumble harder = started();
-    const Run b = fall(harder, 100, 25.0f, play());  // 2 s down
-    check(b.peak >= a.peak && b.on >= a.on, "a longer fall thuds harder");
-    Rumble jump = started();
-    check(fall(jump, 20, 10.0f, play()).on == 0, "an ordinary jump lands quietly");
-    Rumble glide = started();
-    check(fall(glide, 150, 4.0f, play()).on == 0, "a slow glide lands quietly");
-    Rumble ledge = started();
-    Frame caught = play();
-    caught.soft = true;
-    check(fall(ledge, 60, 25.0f, caught).on == 0, "a ledge caught or water: no thud");
-    Settings off;
-    off.landings = false;
-    Rumble o = started(off);
-    check(fall(o, 60, 25.0f, play()).on == 0, "landings off: no thud");
-    rumble::Pattern p{};
-    check(!rumble::landing_pattern(0.5f, 40.0f, p), "under 0.6 s down: no thud");
-    check(rumble::landing_pattern(0.6f, 12.0f, p) && p.count == 1, "at the edge: a light thud, large motor only");
-    check(rumble::landing_pattern(1.5f, 20.0f, p) && p.count == 2 && p.waves[0].amplitude == 255,
-          "a full one: both motors");
-}
-
 void test_camera_shake() {
     Rumble r = started();
     Frame f = play();
@@ -613,25 +574,12 @@ void test_read_frame() {
     m.write<std::int32_t>(disc.hero + kHeroState, 0x2);  // running
 
     Frame f = read_frame(m, disc, true, 0);
-    check(f.playing && !f.dead && !f.grinding && !f.airborne && !f.soft, "running: alive on the ground");
+    check(f.playing && !f.dead && !f.grinding && !f.hovering && !f.swim_dash && !f.slam, "running: alive, nothing held");
     check(std::fabs(f.tick - 0.02f) < 1e-6f, "the game's tick");
     check(!read_frame(m, disc, false, 0).playing, "not in play");
 
-    m.write<std::int16_t>(disc.hero + kAirFrames, 12);
-    m.write<float>(disc.hero + kVelocityZ, -0.4f);
-    f = read_frame(m, disc, true, 0);
-    check(f.airborne && std::fabs(f.fall_speed - 20.0f) < 1e-3f, "in the air, 0.4 a tick down: 20 a second");
-    m.write<float>(disc.hero + kVelocityZ, 0.3f);
-    check(read_frame(m, disc, true, 0).fall_speed == 0.0f, "going up: no fall");
-
     m.write<std::int32_t>(disc.hero + kHeroState, 0x28);
     check(read_frame(m, disc, true, 0).grinding, "state 0x28: on a rail");
-    m.write<std::int32_t>(disc.hero + kHeroState, 0x19);
-    check(read_frame(m, disc, true, 0).soft, "hanging from a ledge: soft");
-    m.write<std::int32_t>(disc.hero + kHeroState, 0x0);
-    m.write<std::uint8_t>(disc.hero + kVehicleMode, 1);
-    check(read_frame(m, disc, true, 0).soft, "as Clank: no landing thuds");
-    m.write<std::uint8_t>(disc.hero + kVehicleMode, 0);
 
     m.write<std::int32_t>(disc.hero + kHeroState, 0x81);
     check(read_frame(m, disc, true, 0).hovering, "state 0x81: the Thruster-Pack's hover");
@@ -715,7 +663,6 @@ int main() {
     test_slam();
     test_hover();
     test_swim_dash();
-    test_landings();
     test_camera_shake();
     test_read_frame();
     test_camera_shake_reader();

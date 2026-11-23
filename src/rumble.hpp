@@ -97,31 +97,6 @@ constexpr Pattern kSlam{{{{Wave::kEase, kLarge, 230, 0.30f}, {Wave::kPulse, kSma
 
 }  // namespace patterns
 
-// --- Hard landings ---
-
-// A landing thuds when he came down for at least kHardDescent seconds and at kHardSpeed units a
-// second or faster at some point (a glide on the Heli-Pack comes down for long, but slowly). From
-// there to kFullDescent the thud grows from 140 to full.
-constexpr float kHardDescent = 0.6f;
-constexpr float kFullDescent = 1.5f;
-constexpr float kHardSpeed = 12.0f;
-
-// The thud of a landing after `descent` seconds coming down at up to `speed` units a second; false
-// for one that is not hard.
-inline bool landing_pattern(float descent, float speed, Pattern& out) {
-    if (descent < kHardDescent || speed < kHardSpeed) {
-        return false;
-    }
-    const float t = std::clamp((descent - kHardDescent) / (kFullDescent - kHardDescent), 0.0f, 1.0f);
-    const auto amplitude = static_cast<std::uint8_t>(std::lround(140.0f + 115.0f * t));
-    out = Pattern{{{{Wave::kEase, kLarge, amplitude, 0.22f + 0.25f * t}}}, 1};
-    if (t >= 0.35f) {
-        out.waves[1] = Wave{Wave::kPulse, kSmall, 255, 0.08f + 0.08f * t};
-        out.count = 2;
-    }
-    return true;
-}
-
 // --- Weapons ---
 
 // How a weapon's shot feels, by the game's item id (OpenRAC port/game/rac1/host/figure_tracks.h,
@@ -308,7 +283,6 @@ private:
 struct Settings {
     int strength = 100;  // percent
     bool damage = true;
-    bool landings = true;
     bool melee = true;
     bool weapons = true;
     bool explosions = true;
@@ -331,12 +305,6 @@ struct Frame {
     bool swim_dash = false;
     // The wrench slam struck the ground this tick.
     bool slam = false;
-    // Feet off the ground.
-    bool airborne = false;
-    // Where he is takes no thud from a landing (water, a ledge caught, as Clank).
-    bool soft = false;
-    // His speed downward, units a second (0 going up).
-    float fall_speed = 0.0f;
     // Seconds a tick.
     float tick = 1.0f / 60.0f;
     // The camera's shake now (the game's eye offset, in units): the stronger channel's
@@ -458,7 +426,6 @@ public:
             }
         }
         if (!m_dead) {
-            land(frame);
             if (frame.slam && m_settings.melee) {
                 m_events.start(patterns::kSlam, m_tick);
             }
@@ -515,9 +482,6 @@ private:
     void silence() {
         m_events.clear();
         m_continuous.clear();
-        m_air = false;
-        m_descent = 0.0f;
-        m_peak = 0.0f;
         m_stream_item = -1;
     }
 
@@ -543,29 +507,6 @@ private:
         out.send = m_sent || !m_announced;
         m_sent = false;
         return out;
-    }
-
-    // The thud of a hard landing: how long and how fast he came down, measured while he is in the
-    // air; on a rail he is on the ground.
-    void land(const Frame& frame) {
-        const bool air = frame.airborne && !frame.grinding;
-        if (air) {
-            if (frame.fall_speed > 0.0f) {
-                m_descent += m_tick;
-                m_peak = std::max(m_peak, frame.fall_speed);
-            }
-            m_air = true;
-            return;
-        }
-        if (m_air && !frame.soft && m_settings.landings) {
-            Pattern thud{};
-            if (landing_pattern(m_descent, m_peak, thud)) {
-                m_events.start(thud, m_tick);
-            }
-        }
-        m_air = false;
-        m_descent = 0.0f;
-        m_peak = 0.0f;
     }
 
     // A take of a stream weapon's ammo: its permanent wave started if it is not playing (one held
@@ -595,10 +536,6 @@ private:
     bool m_dead = false;
     bool m_sent = false;
     bool m_announced = false;
-    // The landing's measure.
-    bool m_air = false;
-    float m_descent = 0.0f;
-    float m_peak = 0.0f;
     // The stream weapon playing (-1: none), its last take of ammo and the ticks it holds after one.
     std::int32_t m_stream_item = -1;
     std::uint32_t m_stream_tick = 0;

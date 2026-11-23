@@ -13,10 +13,6 @@ namespace rac1_rumble {
 
 // --- The hero (offsets from g_hero) ---
 
-// Hero.motion.velocity: units a tick (x, y, z; z is up).
-constexpr std::uint32_t kVelocityZ = 0xE8u;
-// Hero.air_frames: ticks off the ground, 0 on landing (s16).
-constexpr std::uint32_t kAirFrames = 0x30Eu;
 // Hero.unkA64: the wrench's hit latch. wrench_update sets it to 1 as the swing (or the thrown
 // wrench) connects with an enemy, a crate or a wall (with the impact's sparks and sound), and the
 // hero's states clear it for the next swing (rac1-decomp bolts_and_wrench.c, wrench_update).
@@ -31,8 +27,6 @@ constexpr std::uint32_t kAnimFrame = 0xAA8u;
 constexpr std::uint32_t kAnimFrameDelta = 0xAACu;
 // Hero.state.current.
 constexpr std::uint32_t kHeroState = 0x2084u;
-// Hero.vehicle_mode: non-zero as Clank or Giant Clank.
-constexpr std::uint32_t kVehicleMode = 0x20A4u;
 // Hero.health.hp: 0 is dead.
 constexpr std::uint32_t kHealth = 0x22A8u;
 
@@ -88,14 +82,6 @@ constexpr std::int32_t kGrindStates[] = {
     0x28,  // GRIND
     0x2A,  // GRIND_RAIL_TRANSFER
     0x2B,  // GRIND_ATTACK
-};
-
-// Where a fall ends in no thud: water, a ledge caught.
-constexpr std::int32_t kSoftLandingStates[] = {
-    0x18, 0x19, 0x1A, 0x1B, 0x1C,  // LEDGE_HANG_ENTRY ... LEDGE_JUMP
-    0x4B, 0x4D, 0x4E,              // ALT_LEDGE_HANG, its shimmies
-    0x33, 0x34, 0x36, 0x37,        // SWIM, SWIM_IDLE, WATER_SURFACE_MOVE, WATER_SURFACE_ENTRY
-    0x75,                          // WATER_SURFACE_HURT
 };
 
 template <std::size_t N>
