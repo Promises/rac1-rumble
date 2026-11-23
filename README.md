@@ -51,9 +51,9 @@ too early).
 
 ## Needs
 
-**OpenRAC with mod interface 1.37**, for `set_motors`, the call that drives the pads' motors:
-OpenRAC pull request #803 (interface 1.36) and the `set_motors` pull request stacked on it (1.37),
-until a release has them. A port without it refuses the mod and says why.
+**OpenRAC with mod interface 1.37** ([OpenRAC #804](https://github.com/OpenRAC/OpenRAC/pull/804)),
+for `set_motors`, the call that drives the pads' motors. A port without it refuses the mod and says
+why.
 
 The `dualsense` mod has a vibration of its own (hits, crates, pickups) that it plays on a DualSense
 through SDL itself, past `set_motors`. The two load together (no conflict is declared), but on a
@@ -136,6 +136,10 @@ cmake -S . -B build -G Ninja
 cmake --build build && ctest --test-dir build
 python3 .sdk/openrac-mod-sdk-*/tools/package_mod.py build/package/rumble
 ```
+
+Until an `sdk-v*` release has interface 1.37, `sdk.lock` pins the SDK's source at a commit of
+OpenRAC's develop (`git` and `commit`; `tools/fetch_sdk.py` fetches that commit's `sdk/` alone);
+it goes back to a release's `url` and `sha256` once one does.
 
 ## Credits
 

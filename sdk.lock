@@ -1,6 +1,6 @@
 {
-  "about": "The OpenRAC mod SDK this mod builds against: tools/fetch_sdk.py puts it in .sdk/, where CMakeLists.txt finds it. The mod needs interface 1.37 (set_motors), which no OpenRAC release or develop has yet: it is the SDK's source at the sdk-set-motors branch of Promises/OpenRAC (the set_motors pull request, stacked on OpenRAC #803, 1.36); back to OpenRAC's own repository, and then a release's url and sha256, once they have it.",
+  "about": "The OpenRAC mod SDK this mod builds against: tools/fetch_sdk.py puts it in .sdk/, where CMakeLists.txt finds it. The mod needs interface 1.37 (set_motors, OpenRAC #804), which no sdk-v* release has yet: it is the SDK's source at a commit of OpenRAC's develop. Back to a release's url and sha256 once an sdk-v* release has it.",
   "version": "1.37.0",
-  "git": "https://github.com/Promises/OpenRAC",
-  "commit": "4f368333b67871fd5076cbd317540f3bf1b79ada"
+  "git": "https://github.com/OpenRAC/OpenRAC",
+  "commit": "09c7188762638429829b77dae6df61d181329946"
 }
