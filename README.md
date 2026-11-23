@@ -48,7 +48,10 @@ In the launcher's Mods tab, read again whenever they change while the game runs:
   camera shake**, **Rails and swimming**: each on by default.
 - **Hover hum**: off by default.
 
-The player's own rumble setting in OpenRAC applies on top.
+The player's vibration settings in OpenRAC's Controls menu apply; with the mod loaded they are
+available in Ratchet & Clank too (OpenRAC shows them for a game that never rumbles once a mod has
+driven the motors, so the mod sends a 0, 0 at load, or on its first tick when the call at load comes
+too early).
 
 ## Needs
 

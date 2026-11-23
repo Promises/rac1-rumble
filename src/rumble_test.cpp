@@ -41,13 +41,41 @@ Frame play() {
     return f;
 }
 
-// A rumble in play, a first quiet tick behind it (events count from then).
+// A rumble in play whose load-time 0, 0 reached the port, a first quiet tick behind it (events
+// count from then).
 Rumble started(const Settings& settings = Settings{}) {
     Rumble r;
     r.configure(settings);
     r.set_tick(kTick);
+    r.announced();
     r.tick(play());
     return r;
+}
+
+void test_first_call() {
+    // The call at load was refused: the first tick sends 0, 0, in play or not, until one is taken.
+    Rumble r;
+    r.set_tick(kTick);
+    Frame menu = play();
+    menu.playing = false;
+    Motors m = r.tick(menu);
+    check(m.send && m.small == 0 && m.large == 0, "refused at load: 0, 0 on the first tick");
+    m = r.tick(play());
+    check(m.send && m.small == 0 && m.large == 0, "and again while no call has been taken");
+    r.announced();
+    check(!r.tick(play()).send, "taken: nothing more while quiet");
+    // Taken at load: nothing on the first tick.
+    Rumble loaded;
+    loaded.set_tick(kTick);
+    loaded.announced();
+    check(!loaded.tick(menu).send && !loaded.tick(play()).send, "taken at load: quiet ticks send nothing");
+    // A real rumble counts as the first call too.
+    Rumble busy;
+    busy.set_tick(kTick);
+    busy.tick(play());
+    busy.hurt(1);
+    m = busy.tick(play());
+    check(m.send && m.large > 0, "a hit before any call was taken is sent as it is");
 }
 
 // Ticks `r` in `frame` until it goes quiet (at most `limit` ticks): how many ticks sent motors on,
@@ -282,6 +310,7 @@ void test_pause_stops_and_forgets() {
 void test_events_before_play_are_dropped() {
     Rumble r;
     r.set_tick(kTick);
+    r.announced();
     r.hurt(1);
     r.weapon_fired(0x0F);
     check(!r.tick(play()).send, "nothing before the first tick in play");
@@ -424,6 +453,7 @@ void test_jumps() {
     check(!o.tick(play()).send, "jumps off: no kick");
     Rumble paused;
     paused.set_tick(kTick);
+    paused.announced();
     Frame menu = play();
     menu.playing = false;
     paused.tick(menu);
@@ -674,6 +704,7 @@ int main() {
     test_strength_scales();
     test_pause_stops_and_forgets();
     test_events_before_play_are_dropped();
+    test_first_call();
     test_death_jolts_then_silence();
     test_toggles();
     test_weapon_classes();

@@ -494,6 +494,11 @@ public:
     // Whether the last tick sent motors that are still on.
     bool rumbling() const { return m_sent; }
 
+    // The port took a set_motors call. Until it has, every tick that sends nothing sends 0, 0: a
+    // port shows the player's vibration settings for Ratchet & Clank (whose game never rumbles) once
+    // a mod has called it, and the call at load may come too early for it (no window yet).
+    void announced() { m_announced = true; }
+
     const Bank& events() const { return m_events; }
     const Bank& continuous() const { return m_continuous; }
 
@@ -531,10 +536,11 @@ private:
         m_stream_item = -1;
     }
 
-    // 0, 0 once after motors that were on; nothing after that.
+    // 0, 0 once after motors that were on; nothing after that. Until a call has reached the
+    // port (announced()), 0, 0 each tick.
     Motors stop() {
         Motors out;
-        out.send = m_sent;
+        out.send = m_sent || !m_announced;
         m_sent = false;
         return out;
     }
@@ -588,6 +594,7 @@ private:
     bool m_playing = false;
     bool m_dead = false;
     bool m_sent = false;
+    bool m_announced = false;
     // The landing's measure.
     bool m_air = false;
     float m_descent = 0.0f;

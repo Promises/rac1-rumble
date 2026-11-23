@@ -61,8 +61,8 @@ void tick() {
     const bool playing = level >= 0 && mod.play_status().phase == OPENRAC_PLAY_PLAYING;
     const std::uint32_t shake = playing ? mod.relocate_level(0, s.disc.shake_l00) : 0;
     const rumble::Motors out = s.rumble.tick(rr::read_frame(mod.memory(), s.disc, playing, shake));
-    if (out.send) {
-        mod.set_motors(0, out.small, out.large);
+    if (out.send && mod.set_motors(0, out.small, out.large)) {
+        s.rumble.announced();
     }
 }
 
@@ -153,6 +153,11 @@ void load(openrac::Mod& mod) {
     s.rumble.configure(read_settings(mod));
     if (mod.has_settings_set()) {
         mod.on_settings([] { state().rumble.configure(read_settings(*state().mod)); });
+    }
+    // A first call, 0, 0, so the port shows the player's vibration settings for this game; refused
+    // here (no window yet), the first tick sends it (Rumble::announced).
+    if (mod.set_motors(0, 0, 0)) {
+        s.rumble.announced();
     }
     mod.info("controller rumble at " + std::to_string(s.rumble.settings().strength) + "%");
 }
