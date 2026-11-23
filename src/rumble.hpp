@@ -28,8 +28,10 @@ constexpr std::uint8_t kSmall = 0;
 constexpr std::uint8_t kLarge = 1;
 enum Shape : unsigned char { kSquare = 1, kTriangle = 2, kSawUp = 3, kSawDown = 4, kCosine = 5 };
 
-// The small motor is on or off: on while its mixed value, times the strength, is at least this.
-constexpr int kSmallOn = 96;
+// The small motor is on or off. Its mixed value (0 to 255, times the strength) is how often it is
+// on: a running sum gains the value each tick and the motor is on for each 255 the sum passes, so 255
+// is on every tick, 128 every other one and 64 one tick in four. Going Commando's actuator update
+// drives its small motor the same way (rac2-decomp func_L00_002D6FD8).
 
 // One wave of a pattern, in seconds (made a channel of ticks as it starts, at the game's tick); the
 // fields after the kind are the channel's own, by their names in Going Commando's (WaveChannel).
@@ -87,13 +89,16 @@ constexpr Pattern kGrind{{{{Wave::kLoop, kLarge, 22, 0.0f, 0.0f, 0.12f, 22}}}, 1
 constexpr Pattern kSwimDash{{{{Wave::kLoop, kLarge, 30, 0.0f, 0.0f, 0.20f, 40}}}, 1};
 // Held up by the Thruster-Pack or the Heli-Pack: a faint hum (Going Commando has none).
 constexpr Pattern kHover{{{{Wave::kLoop, kLarge, 10, 0.0f, 0.0f, 0.25f, 18}}}, 1};
-// A pack's jump starting (the Thruster-Pack's long jump; Going Commando's pattern 20): a kick.
-constexpr Pattern kPackJump{{{{Wave::kFade, kLarge, 150, 0.15f}, {Wave::kPulse, kSmall, 255, 0.05f}}}, 2};
-// A wall jump (Going Commando's pattern 27): a lighter kick.
-constexpr Pattern kWallJump{{{{Wave::kFade, kLarge, 120, 0.12f}}}, 1};
-// The wrench slam striking the ground (Going Commando's pattern 25, with a camera shake): a thump,
-// between a hit taken and the heaviest shot.
-constexpr Pattern kSlam{{{{Wave::kEase, kLarge, 230, 0.30f}, {Wave::kPulse, kSmall, 255, 0.10f}}}, 2};
+// A pack's jump starting (the Thruster-Pack's long jump; Going Commando's pattern 20): a low, steady
+// push on both motors (the small one a tick in four) that lasts longer than a hit and is weaker,
+// as Going Commando's does, until the jump's state ends (Rumble::jumped).
+constexpr Pattern kPackJump{{{{Wave::kPulse, kLarge, 80, 0.55f}, {Wave::kPulse, kSmall, 64, 0.55f}}}, 2};
+// A wall jump (Going Commando's pattern 27): the lightest of the jumps, a flick of the small motor
+// alone.
+constexpr Pattern kWallJump{{{{Wave::kPulse, kSmall, 255, 0.06f}}}, 1};
+// The wrench slam striking the ground (Going Commando's pattern 25, with a camera shake): a thump
+// on both motors, the large one below a hit's, as Going Commando's is.
+constexpr Pattern kSlam{{{{Wave::kEase, kLarge, 180, 0.30f}, {Wave::kPulse, kSmall, 255, 0.10f}}}, 2};
 
 }  // namespace patterns
 
@@ -305,6 +310,9 @@ struct Frame {
     bool swim_dash = false;
     // The wrench slam struck the ground this tick.
     bool slam = false;
+    // The button of the item in hand held, its use not locked: what the stream weapons fire on.
+    // True when it is not known.
+    bool trigger_held = true;
     // Seconds a tick.
     float tick = 1.0f / 60.0f;
     // The camera's shake now (the game's eye offset, in units): the stronger channel's
@@ -357,16 +365,20 @@ public:
         }
     }
 
-    // The hero entered move state `state` (enter_move_state took it): the pack's jumps and the wall
-    // jump kick.
+    // The hero entered move state `state` (enter_move_state took it): a jump's kick ends, and the
+    // pack's jumps and the wall jump start one. Going Commando stops its patterns on every change
+    // of the hero's state (but for the wrench slam's, for a moment after it strikes), so a jump's
+    // rumble lasts until the jump's state ends; here only the jumps' own waves stop, as the mod's
+    // other events are not Going Commando's.
     void jumped(std::int32_t state) {
+        m_events.stop(kJumpTag);
         if (!taking() || !m_settings.jumps) {
             return;
         }
         if (state == 0xD || state == 0x10) {
-            m_events.start(patterns::kPackJump, m_tick);
+            m_events.start(patterns::kPackJump, m_tick, kJumpTag);
         } else if (state == 0x11) {
-            m_events.start(patterns::kWallJump, m_tick);
+            m_events.start(patterns::kWallJump, m_tick, kJumpTag);
         }
     }
 
@@ -432,7 +444,10 @@ public:
             hold(kGrindTag, frame.grinding && m_settings.grind, patterns::kGrind);
             hold(kSwimTag, frame.swim_dash && m_settings.grind, patterns::kSwimDash);
             hold(kHoverTag, frame.hovering && m_settings.hover, patterns::kHover);
-            if (m_stream_item >= 0 && (!m_settings.weapons || m_ticks - m_stream_tick > m_stream_hold)) {
+            // A stream weapon stops as its button is let go, as Going Commando ends its weapons'
+            // looping waves; with no take of ammo for a while (none left), it stops too.
+            if (m_stream_item >= 0 &&
+                (!m_settings.weapons || !frame.trigger_held || m_ticks - m_stream_tick > m_stream_hold)) {
                 end_stream();
             }
         }
@@ -449,7 +464,7 @@ public:
         const int strength = std::clamp(m_settings.strength, 0, 100);
         Motors out;
         out.large = (large * strength + 50) / 100;
-        out.small = small * strength >= kSmallOn * 100 ? 1 : 0;
+        out.small = small_motor((small * strength + 50) / 100);
         if (out.large == 0 && out.small == 0) {
             return stop();
         }
@@ -473,6 +488,8 @@ private:
     static constexpr int kGrindTag = 1;
     static constexpr int kSwimTag = 2;
     static constexpr int kHoverTag = 3;
+    // The jumps' kicks, in the events' bank.
+    static constexpr int kJumpTag = 4;
     // A stream weapon's tag: its item, past the others.
     static constexpr int kStreamTag = 0x100;
 
@@ -483,6 +500,22 @@ private:
         m_events.clear();
         m_continuous.clear();
         m_stream_item = -1;
+        m_small_sum = 0;
+    }
+
+    // The small motor for a mixed `value` (0 to 255): on for each 255 the running sum passes. A
+    // value of 0 empties the sum, so each kick starts on its first tick.
+    int small_motor(int value) {
+        if (value <= 0) {
+            m_small_sum = 0;
+            return 0;
+        }
+        m_small_sum += value;
+        if (m_small_sum >= 255) {
+            m_small_sum -= 255;
+            return 1;
+        }
+        return 0;
     }
 
     // A permanent wave for as long as `on` holds: started the tick it turns on, stopped the tick
@@ -536,6 +569,8 @@ private:
     bool m_dead = false;
     bool m_sent = false;
     bool m_announced = false;
+    // The small motor's running sum (small_motor).
+    int m_small_sum = 0;
     // The stream weapon playing (-1: none), its last take of ammo and the ticks it holds after one.
     std::int32_t m_stream_item = -1;
     std::uint32_t m_stream_tick = 0;

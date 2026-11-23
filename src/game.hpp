@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Henning Berge
 //
 // What the rumble needs of the game each tick (rumble::Frame), read from its memory: the hero's
-// state, health and animation, and the level camera's shake. Memory is anything with
+// state, health and animation, the item button held, and the level camera's shake. Memory is anything with
 // read<T>(address) (openrac::Memory in the game, a buffer in the tests).
 #pragma once
 
@@ -61,6 +61,9 @@ rumble::Frame read_frame(const Memory& m, const Disc& disc, bool playing, std::u
     f.grinding = one_of(state, kGrindStates);
     f.hovering = one_of(state, kHoverStates);
     f.swim_dash = state == kSwimDash;
+    f.trigger_held = (m.template read<std::int32_t>(disc.pad + kPadHeld) &
+                      m.template read<std::int32_t>(hero + kItemButtons)) != 0 &&
+                     m.template read<std::uint8_t>(hero + kItemUseLocked) == 0;
     if (state == kWrenchSlam) {
         // test_hero_animation_frame_window(27), as wrench_update asks it for the slam's impact.
         const float frame = m.template read<float>(hero + kAnimFrame);

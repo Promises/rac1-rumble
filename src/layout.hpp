@@ -25,10 +25,20 @@ constexpr std::uint32_t kItemInHand = 0x10B8u;
 // frame - T <= delta).
 constexpr std::uint32_t kAnimFrame = 0xAA8u;
 constexpr std::uint32_t kAnimFrameDelta = 0xAACu;
+// Hero.items[0].button_mask: the pad buttons of the item in hand, which the stream weapons fire on
+// while one is held (the Pyrocitor's, the Tesla Claw's and the Morph-o-Ray's updates).
+constexpr std::uint32_t kItemButtons = 0x10A0u;
+// Hero.item_use_locked: the item in hand may not be used (the stream weapons stop).
+constexpr std::uint32_t kItemUseLocked = 0x20ACu;
 // Hero.state.current.
 constexpr std::uint32_t kHeroState = 0x2084u;
 // Hero.health.hp: 0 is dead.
 constexpr std::uint32_t kHealth = 0x22A8u;
+
+// --- The controller (g_controller_state, PadState in rac1-decomp include/structs/pad.h) ---
+
+// PadState.held: the buttons down this tick (pad_held).
+constexpr std::uint32_t kPadHeld = 0x1A0u;
 
 // --- The level camera's shake (CameraSystem.shake at +0x160: two CameraShake records of 0x10
 // bytes, f32 amplitude, f32 offset, s32 frames, s32 frames_max). apply_camera_shake moves the eye by
@@ -99,6 +109,8 @@ struct Disc {
     std::uint32_t hero;
     // g_frame_time: seconds a tick.
     std::uint32_t frame_time;
+    // g_controller_state, the first pad's (PAL D_0013CA40; NTSC 0x0013C940, rac1_version.h).
+    std::uint32_t pad;
     // The level camera's shake records: level 0's address, which relocate_level(0, ...) moves to
     // the level loaded now (PAL D_L00_00166EE0; NTSC 0x00166DE0, rac1_version.h).
     std::uint32_t shake_l00;
@@ -108,9 +120,9 @@ struct Disc {
 
 inline Disc disc_for(bool ntsc) {
     if (ntsc) {
-        return {0x0013F350u, 0x0015ED6Cu, 0x00166DE0u, 1.0f / 60.0f};
+        return {0x0013F350u, 0x0015ED6Cu, 0x0013C940u, 0x00166DE0u, 1.0f / 60.0f};
     }
-    return {0x0013F450u, 0x0015EE6Cu, 0x00166EE0u, 1.0f / 50.0f};
+    return {0x0013F450u, 0x0015EE6Cu, 0x0013CA40u, 0x00166EE0u, 1.0f / 50.0f};
 }
 
 }  // namespace rac1_rumble

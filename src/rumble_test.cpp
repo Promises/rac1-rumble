@@ -105,6 +105,16 @@ Run run(Rumble& r, const Frame& frame, int limit = 500) {
     return out;
 }
 
+// Ticks `r` `ticks` times in `frame`; how many sent the large motor on.
+int held(Rumble& r, const Frame& frame, int ticks) {
+    int on = 0;
+    for (int i = 0; i < ticks; ++i) {
+        const Motors m = r.tick(frame);
+        on += m.send && m.large > 0 ? 1 : 0;
+    }
+    return on;
+}
+
 // --- The mixer ---
 
 void test_mixer_pulse_plays_its_length() {
@@ -222,6 +232,34 @@ void test_mixer_counted_wave_ends() {
 
 // --- The rumble ---
 
+void test_small_motor_density() {
+    // A small-motor wave at `amplitude` for 20 ticks: on as many ticks as amplitude / 255 of them.
+    for (int amplitude : {255, 128, 64}) {
+        rumble::Bank bank;
+        bank.start(rumble::Pattern{{{{rumble::Wave::kPulse, rumble::kSmall, static_cast<std::uint8_t>(amplitude), 0.4f}}}, 1},
+                   kTick);
+        int sum = 0;
+        int on = 0;
+        for (int i = 0; i < 20; ++i) {
+            sum += bank.mix()[rumble::kSmall];
+            on += sum >= 255 ? 1 : 0;
+            sum -= sum >= 255 ? 255 : 0;
+        }
+        check(on == amplitude * 20 / 255, "the running sum puts the motor on amplitude / 255 of the ticks");
+    }
+    // Through the rumble: the long jump's small motor (a quarter) on about one tick in four.
+    Rumble r = started();
+    r.jumped(0x10);
+    int on = 0;
+    int ticks = 0;
+    for (int i = 0; i < 24; ++i) {
+        const Motors m = r.tick(play());
+        on += m.small;
+        ticks += m.send && m.large > 0 ? 1 : 0;
+    }
+    check(ticks == 24 && on >= 5 && on <= 7, "the long jump's push: the small motor a tick in four");
+}
+
 void test_every_pattern_ends() {
     const rumble::Pattern* all[] = {
         &rumble::patterns::kHurt,       &rumble::patterns::kHurtHeavy,  &rumble::patterns::kDeath,
@@ -280,12 +318,17 @@ void test_strength_scales() {
     r.hurt(1);
     const Motors h = r.tick(play());
     check(std::abs(h.large * 2 - f.large) <= 2, "50% halves the large motor");
-    check(f.small == 1 && h.small == 1, "the small motor stays on at 50%");
+    check(f.small == 1 && h.small == 0, "50%: the small motor off on the hit's first tick");
+    check(r.tick(play()).small == 1, "and on on its second");
     Settings low;
     low.strength = 30;
     Rumble l = started(low);
     l.hurt(1);
-    check(l.tick(play()).small == 0, "the small motor drops out at 30%");
+    int on = 0;
+    for (int i = 0; i < 6; ++i) {
+        on += l.tick(play()).small;
+    }
+    check(on == 1, "30%: the small motor on one tick of the hit's six");
     Settings off;
     off.strength = 0;
     Rumble o = started(off);
@@ -383,6 +426,26 @@ void test_weapon_classes() {
     check(b.on > 10 && b.peak >= 240, "a Devastator shot: long and full");
 }
 
+void test_stream_stops_on_release() {
+    Rumble r = started();
+    Frame firing = play();
+    for (int i = 0; i < 30; ++i) {
+        if (i % 6 == 0) {
+            r.weapon_fired(0x10);
+        }
+        check(r.tick(firing).large > 0, "the Pyrocitor buzzes while its button is held");
+    }
+    Frame let_go = play();
+    let_go.trigger_held = false;
+    const Motors m = r.tick(let_go);
+    check(m.send && m.large == 0 && m.small == 0, "let go: it stops that tick, as Going Commando's weapons do");
+    check(!r.tick(play()).send, "and stays stopped");
+    // A shot weapon's kick is not cut by the button let go.
+    Rumble shot = started();
+    shot.weapon_fired(0x0B);
+    check(run(shot, let_go).on > 10, "a Devastator shot plays its length");
+}
+
 void test_stream_holds_while_firing() {
     Rumble r = started();
     int on = 0;
@@ -431,14 +494,32 @@ void test_jumps() {
     Rumble long_jump = started();
     long_jump.jumped(0x10);
     const Run a = run(long_jump, play());
-    check(a.on >= 6 && a.on <= 9 && a.peak >= 130 && a.stopped, "the Thruster-Pack's long jump: a short kick");
+    check(a.on >= 26 && a.on <= 29 && a.peak >= 60 && a.peak <= 100 && a.stopped,
+          "the Thruster-Pack's long jump: a low push of about half a second");
     Rumble flip = started();
     flip.jumped(0xD);
-    check(run(flip, play()).peak == a.peak, "state 0xD: the same kick (Going Commando's pattern 20 for both)");
+    check(run(flip, play()).peak == a.peak, "state 0xD: the same push (Going Commando's pattern 20 for both)");
     Rumble wall = started();
     wall.jumped(0x11);
-    const Run w = run(wall, play());
-    check(w.on > 0 && w.peak < a.peak, "a wall jump: a lighter kick");
+    int small = 0;
+    int large = 0;
+    for (int i = 0; i < 10; ++i) {
+        const Motors m = wall.tick(play());
+        small += m.small;
+        large = std::max(large, m.large);
+    }
+    check(small == 3 && large == 0, "a wall jump: a flick of the small motor alone, the lightest");
+    // The jump's push ends as its state does (Going Commando stops its patterns on a change of state).
+    Rumble cut = started();
+    cut.jumped(0x10);
+    check(held(cut, play(), 5) == 5, "the push plays while the jump lasts");
+    cut.jumped(0x6);  // falling
+    const Motors m = cut.tick(play());
+    check(m.send && m.large == 0, "and stops as the hero's state changes");
+    Rumble hit = started();
+    hit.hurt(1);
+    hit.jumped(0x6);
+    check(hit.tick(play()).large > 0, "a change of state leaves a hit's jolt playing");
     for (std::int32_t plain : {0x7, 0x9, 0xA, 0xB, 0xE, 0x8, 0x81}) {
         Rumble r = started();
         r.jumped(plain);
@@ -471,22 +552,15 @@ void test_slam() {
     f.slam = true;
     const Motors first = r.tick(f);
     const Run rest = run(r, play());
-    check(first.send && first.small == 1 && rest.peak >= 200 && rest.on >= 12 && rest.stopped,
+    check(first.send && first.small == 1 && first.large >= 160 && rest.on >= 12 && rest.stopped,
           "the wrench slam striking: a thump on both motors");
+    Rumble hurt = started();
+    hurt.hurt(1);
+    check(first.large < hurt.tick(play()).large, "its large motor below a hit's, as in Going Commando");
     Settings off;
     off.melee = false;
     Rumble o = started(off);
     check(!o.tick(f).send, "wrench and kills off: no thump");
-}
-
-// Ticks `r` `ticks` times in `frame`; how many sent the large motor on.
-int held(Rumble& r, const Frame& frame, int ticks) {
-    int on = 0;
-    for (int i = 0; i < ticks; ++i) {
-        const Motors m = r.tick(frame);
-        on += m.send && m.large > 0 ? 1 : 0;
-    }
-    return on;
 }
 
 void test_hover() {
@@ -603,6 +677,18 @@ void test_read_frame() {
     m.write<float>(disc.hero + kAnimFrame, 27.4f);
     check(!read_frame(m, disc, true, 0).slam, "frame 27 of another attack: no slam");
 
+    // The item's button: held with the item in hand's mask, its use not locked.
+    m.write<std::int32_t>(disc.hero + kHeroState, 0x0);
+    m.write<std::int32_t>(disc.hero + kItemButtons, 0x8);  // R1
+    m.write<std::int32_t>(disc.pad + kPadHeld, 0x8 | 0x40);
+    check(read_frame(m, disc, true, 0).trigger_held, "R1 held, the item on R1: its button held");
+    m.write<std::int32_t>(disc.pad + kPadHeld, 0x40);
+    check(!read_frame(m, disc, true, 0).trigger_held, "only X held: not");
+    m.write<std::int32_t>(disc.pad + kPadHeld, 0x8);
+    m.write<std::uint8_t>(disc.hero + kItemUseLocked, 1);
+    check(!read_frame(m, disc, true, 0).trigger_held, "its use locked: not");
+    check(disc_for(true).pad == 0x0013C940u && disc.pad == 0x0013CA40u, "the controller on both discs");
+
     m.write<std::int32_t>(disc.hero + kHeroState, 0x3D);
     check(read_frame(m, disc, true, 0).dead, "state 0x3D: dying");
     m.write<std::int32_t>(disc.hero + kHeroState, 0x0);
@@ -657,6 +743,8 @@ int main() {
     test_toggles();
     test_weapon_classes();
     test_stream_holds_while_firing();
+    test_stream_stops_on_release();
+    test_small_motor_density();
     test_continuous_does_not_halve_a_hit();
     test_grind();
     test_jumps();

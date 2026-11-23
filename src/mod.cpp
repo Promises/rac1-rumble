@@ -12,7 +12,7 @@
 //   rac1.player.enter_move_state  a state taken: the Thruster-Pack's long jump, the wall jump
 // and after each tick (on_frame): the game's phase (play_status: rumble only in play, not paused, in
 // a menu or a scene), the hero (dying, the wrench slam striking, on a rail, the Hydro-Pack's
-// dash, a pack's hover) and the camera's shake (explosions, quakes, anything
+// dash, a pack's hover, the item's button held) and the camera's shake (explosions, quakes, anything
 // that shakes it), then the motors (set_motors, interface 1.37).
 // Each hook point is optional: a disc without one plays the rest.
 #include <cstdint>
@@ -163,4 +163,4 @@ void load(openrac::Mod& mod) {
 
 }  // namespace
 
-OPENRAC_MOD_CPP("rumble", "1.0.0", load)
+OPENRAC_MOD_CPP("rumble", "1.0.1", load)

@@ -2,7 +2,7 @@
   "format": 2,
   "id": "rumble",
   "name": "Rumble",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Henning Berge",
   "description": "Controller rumble in the style of Going Commando, which Ratchet & Clank never had: hits taken, the Thruster-Pack's long jump and wall jumps, wrench hits and the wrench slam, kills and broken crates, every weapon's shot (a steady buzz while the Pyrocitor, Tesla Claw or Morph-o-Ray fires), explosions and anything else that shakes the camera, rails and the Hydro-Pack's dash, and (off by default) a faint hum while a pack holds Ratchet up. The waves play on Going Commando's own vibration mixer, copied from its decompilation. Quiet in menus, scenes and while Ratchet is dead. Needs OpenRAC with mod interface 1.37.",
   "license": "GPL-3.0-or-later AND GPL-3.0-only",
@@ -29,7 +29,7 @@
       "default": 100,
       "min": 0,
       "max": 100,
-      "description": "How strong the rumble is, in percent: the large motor's strength scales; the small motor, which is only on or off, drops out below about 40%."
+      "description": "How strong the rumble is, in percent: the large motor's strength scales; the small motor, which is only on or off, comes on less often, as Going Commando drives it."
     },
     {
       "key": "damage",
@@ -43,7 +43,7 @@
       "name": "Jumps",
       "type": "bool",
       "default": true,
-      "description": "A kick as the Thruster-Pack's long jump starts, and a lighter one for a wall jump, where Going Commando kicks for its own."
+      "description": "A low push while the Thruster-Pack's long jump lasts, and a flick of the small motor for a wall jump, where Going Commando rumbles for its own."
     },
     {
       "key": "melee",
@@ -57,7 +57,7 @@
       "name": "Weapons",
       "type": "bool",
       "default": true,
-      "description": "A kick for each shot, by weapon: light for the Blaster, heavier for the Bomb Glove and Walloper, strongest for the Devastator and the R.Y.N.O., and a steady buzz while the Pyrocitor, Tesla Claw or Morph-o-Ray fires."
+      "description": "A kick for each shot, by weapon: light for the Blaster, heavier for the Bomb Glove and Walloper, strongest for the Devastator and the R.Y.N.O., and a steady buzz while the Pyrocitor, Tesla Claw or Morph-o-Ray fires, which stops as its button is let go."
     },
     {
       "key": "explosions",

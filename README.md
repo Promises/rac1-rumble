@@ -12,16 +12,18 @@ Commando's own mixer, copied from its decompilation. PAL and NTSC-U.
 
 - **Hits taken**: a jolt that eases off over a third of a second, both motors; a heavier hit (the
   game's damage 2 or more) is stronger and longer. Dying: a long jolt, then nothing.
-- **Jumps**, where Going Commando kicks for its own: a short kick as the Thruster-Pack's long jump
-  starts (and the jump that shares its kick in Going Commando, state 0xD), a lighter one for a wall
-  jump. Ordinary jumps, high jumps and double jumps stay quiet, as in Going Commando.
+- **Jumps**, where Going Commando rumbles for its own: a low push on both motors while the
+  Thruster-Pack's long jump lasts (and the jump that shares it in Going Commando, state 0xD),
+  weaker than a hit and longer, ending as the jump's state does; a flick of the small motor for a
+  wall jump. Ordinary jumps, high jumps and double jumps stay quiet, as in Going Commando.
 - **The wrench**: a short knock each time it connects with an enemy, a crate or a wall (swung or
   thrown), and a thump as the wrench slam strikes the ground.
 - **Kills and crates**: a short bump for each enemy killed and each crate broken.
 - **Weapons**, a kick per shot by weapon: light for the Blaster, Mine Glove, Decoy Glove, Drone
   Device, Taunter and Suck Cannon; heavier for the Bomb Glove, Visibomb Gun, Walloper and Glove of
   Doom; strongest for the Devastator and the R.Y.N.O. While the Pyrocitor, Tesla Claw or
-  Morph-o-Ray fires, a steady low buzz of its own (a roar, a crackle, a hum).
+  Morph-o-Ray fires, a steady low buzz of its own (a roar, a crackle, a hum), which stops the tick
+  its button is let go, as Going Commando's looping weapon waves do.
 - **Explosions and camera shake**: the game shakes its camera for explosions near it, quakes and
   scripted moments; the large motor follows the shake, as strong as it is, and the small one joins
   in for the strongest. Going Commando pairs its rumble with the camera's shake the same way.
@@ -39,7 +41,7 @@ is dead; what was playing stops at once and does not come back after.
 In the launcher's Mods tab, read again whenever they change while the game runs:
 
 - **Strength** (0 to 100%, default 100): the large motor's strength scales; the small motor is only
-  on or off, and drops out below about 40%.
+  on or off, and comes on less often (at 50%, every other tick of a kick).
 - **Hits taken**, **Jumps**, **Wrench and kills**, **Weapons**, **Explosions and
   camera shake**, **Rails and swimming**: each on by default.
 - **Hover hum**: off by default.
@@ -80,41 +82,48 @@ Where the moments come from:
 |---|---|
 | Hits taken | `rac1.player.take_damage`, its damage |
 | Dying | the hero's state (dying, drowning, a fatal fall...) or no health, each tick |
-| Jumps | `rac1.player.enter_move_state`: states 0x10 (the Thruster-Pack's long jump), 0xD and 0x11 (the wall jump) taken |
+| Jumps | `rac1.player.enter_move_state`: states 0x10 (the Thruster-Pack's long jump), 0xD and 0x11 (the wall jump) taken; the next state taken ends the push |
 | The wrench | `rac1.moby.wrench.update`: the wrench's hit latch (`Hero.unkA64`) set during its update |
 | The wrench slam | the hero in state 0x14 with his animation passing frame 27 this tick, where `wrench_update` strikes the ground |
 | Kills and crates | `rac1.moby.record_death` |
-| Weapons | `rac1.weapon.take_ammo` (a shot taken), by the weapon in hand |
+| Weapons | `rac1.weapon.take_ammo` (a shot taken), by the weapon in hand; a stream weapon's buzz stops when its button is let go (the pad's held buttons and the item in hand's button mask, `items[0].button_mask`, as the stream weapons' updates read them) or its use is locked |
 | Camera shake | the level camera's two shake channels, each tick: amplitude times (frames left / frames)², as the game's `apply_camera_shake` scales its shake |
 | Rails, the Hydro-Pack's dash, the hover | the hero's state (grinding; 0x35; 0x81 or 0x8), each tick |
 | Quiet | `play_status`: only in play, not paused, in a menu or a scene |
 
 After each tick the motors get the mix (`set_motors`, every tick while it plays, as a command holds
-a fifth of a second; then 0, 0 once).
+a fifth of a second; then 0, 0 once). The small motor is only on or off: as in Going Commando's
+actuator update, its mixed value is how often it is on (a running sum gains the value each tick,
+and the motor is on for each 255 it passes), so a wave of 64 turns it on one tick in four.
 
 ### Going Commando's rumble, and what is here
 
-Going Commando starts its patterns from these places (rac2-decomp, USA v1.01, in the code it has
-decompiled; its PAL and v2.00 builds call them from the same functions). Its pattern data is on its disc, so the strengths here are
-this mod's, kept in the same order.
+Every call of Going Commando's pattern player (rac2-decomp's `actuator_play_pattern`,
+`actuator_play_waves`, `actuator_stop_all` and `actuator_end_looping_waves`), found in all 27 level
+programs of its USA v2.00 disc. Its patterns and waves are data on its disc, so nothing of them is
+copied: the waves here are this mod's own, set by hand, in the order Going Commando's come in
+(which is longer or stronger, which motor, looping or not).
 
 | Going Commando | Ratchet & Clank | Here |
 |---|---|---|
-| Pattern 18: hit taken (hero states 0x16 and 0x8C, as it takes the health) | `take_damage` | Hits taken |
-| Pattern 20: entering 0x10 and 0xD (the same states in Ratchet & Clank, the same heights and trails) | 0x10 the Thruster-Pack's long jump, 0xD | Jumps |
-| Pattern 27: entering 0x11 | 0x11, the wall jump | Jumps (lighter) |
-| Pattern 25: the wrench slam (0x14) striking the ground, with a camera shake | 0x14, frame 27 | Wrench and kills |
-| Pattern 22 each tick of the swim dash (0x34) | 0x35, the Hydro-Pack's dash | Rails and swimming |
-| Pattern 19: entering 0x1F with a gadget in hand (its animation 0x60) | none found: Ratchet & Clank's 0x1F is an idle wait | not here |
-| Weapon patterns, started as they fire and stopped by handle (`minirocket_tube_update`, `blitz_gun_update`, `lancer_update`, `mini_l00_nuke_update`, `UpdateLockOnWeapon`, `UpdateSpreadWeapon`, `UpdateScopedWeapon`, `vaporizer_update`, `gravity_bomb_launcher_update`, `bouncer_update`, `charging_weapon_update`, `megarocket_cannon_update`) | Ratchet & Clank's weapons, through `take_ammo` | Weapons |
-| Hoverbike race: a rocket fired (47), a crash with its explosion (28) | the Hoverboard races: no hook point at a crash | camera shake only, if any |
-| Space combat (Feltzin, the orbits): the ship's weapons, hits and collisions, boss parts (22, 25, 43) | none: Ratchet & Clank has no space combat | not here |
-| Oozla's ferry and the grabber (4, 5, 7, level patterns) | none | not here |
-| All patterns cleared as the hero changes state (unless a slam's lock holds them) | | not copied: patterns here run their length |
+| A hit taken (entering hero states 0x16 and 0x8C): short and strong, the large motor | `take_damage` | Hits taken (and a heavier hit, the mod's own) |
+| The long jump and state 0xD (entering 0x10, 0xD): a low push on both motors, longer than a hit and weaker, until the next change of state | the same states | Jumps |
+| The wall jump (entering 0x11): the lightest, a flick of the small motor | 0x11 | Jumps |
+| The wrench slam striking the ground (0x14): both motors, the large one below a hit's, with a camera shake | 0x14, its animation's frame 27 | Wrench and kills |
+| The swim dash (0x34): every tick it lasts, ended by the change of state | 0x35, the Hydro-Pack's dash | Rails and swimming |
+| State 0x1F with an object in hand | none found (Ratchet & Clank's 0x1F is an idle wait) | not here |
+| Weapons, a short kick per shot, on both motors for those checked (`minirocket_tube_update`, `blitz_gun_update`, `lancer_update`, `gravity_bomb_launcher_update`, `mini_l00_nuke_update`, `vaporizer_update`, `bouncer_update`, `megarocket_cannon_update`, `UpdateLockOnWeapon`, `UpdateSpreadWeapon`, `UpdateScopedWeapon`), a rising wave as `charging_weapon_update` charges | Ratchet & Clank's weapons, a shot each `take_ammo` | Weapons (kicks by weapon, the mod's own strengths) |
+| `lancer_update` for its second moby class (the upgraded Lancer, it seems): a looping wave from its first shot until its button is let go or its ammo runs out (`actuator_end_looping_waves`) | the stream weapons: Pyrocitor, Tesla Claw, Morph-o-Ray | Weapons: a buzz that stops as the button is let go |
+| Every change of the hero's state stops all waves (`actuator_stop_all`), but for 50 ticks after the wrench slam strikes | | the jumps' push only; the mod's other events play their length |
+| Dying: nothing (the change to the dying state stops everything) | | Hits taken: a long jolt, the mod's own |
+| Hoverbike races: a rocket fired (`racer_update_item_use`), a crash (`hoverboard_update_rider_physics`) | the Hoverboard races: no hook point at a crash | camera shake only, if any |
+| Space combat (Feltzin and the orbits): the ship's weapons, its collisions, boss parts and shots | none: Ratchet & Clank has no space combat | not here |
+| Oozla: the ferry (looping while it carries Ratchet) and the grabber | none | not here |
+| The small motor: on as often as its mixed value says (a running sum) | | the same since 1.0.1 |
 
-Not Going Commando's (none of its decompiled code rumbles for them): kills and crates, rails, the
-camera's shake followed as a level, the stream weapons' buzz, the hover hum. Landings stay quiet, as
-in Going Commando.
+Not Going Commando's (none of its code rumbles for them): kills and crates, the wrench's knock,
+rails, the camera's shake followed as a level, the hover hum, the death jolt. Landings stay quiet,
+as in Going Commando.
 
 The game has no hook point at its explosion spawn; explosions reach the rumble through the camera's
 shake, so one out of view (which shakes nothing) does not rumble. A hook point there would be an
