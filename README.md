@@ -3,8 +3,8 @@
 A native mod for [OpenRAC](https://github.com/OpenRAC/OpenRAC)'s port of Ratchet & Clank:
 **controller rumble in the style of Going Commando**. Ratchet & Clank has a vibration mixer, but the
 retail game never drives the pad's motors; Going Commando does, for hits, hard landings, explosions
-and its weapons. This mod plays rumble for the same kind of moments in Ratchet & Clank, on the
-game's own mixer, copied from its decompilation. PAL and NTSC-U.
+and its weapons. This mod plays rumble for the same kind of moments in Ratchet & Clank, on Going
+Commando's own mixer, copied from its decompilation. PAL and NTSC-U.
 
 ## What rumbles
 
@@ -53,14 +53,17 @@ setting, or this mod, there.
 
 ## How it works
 
-Ratchet & Clank's mixer, `actuator_CalcPower`, mixes eight wave slots (square, triangle, rising and
-falling saw, cosine; each on the small or the large motor, with a delay, a length, a height and a
-floor) into one value per motor each tick. The game has it but nothing calls it; Going Commando
-runs the same mixer with a pattern player whose patterns are data on its disc. The mod copies the
-mixer (`src/actuator.c`, unchanged but for its wave array being a parameter) and plays its own
-patterns on it (`src/rumble.hpp`), in two banks: one for short events and one for what lasts (a
-held stream weapon, a rail). The mixer averages the waves on a motor; the two banks and the camera's
-shake are joined by the stronger, so a flamethrower's buzz never halves a hit.
+Going Commando's mixer, `LevelActuatorCalcPower`, mixes eight wave channels (square, triangle,
+rising and falling saw, cosine; each on the small or the large motor, with a delay, a duration, an
+amplitude and a bias) into one value per motor each tick. A channel counts its duration down and
+empties, unless it is permanent: then it plays until it is stopped. Ratchet & Clank has the same
+mixer without permanent channels (`actuator_CalcPower`), and nothing calls it; Going Commando drives
+its mixer with a pattern player whose patterns are data on its disc. The mod copies Going
+Commando's mixer (`src/actuator.c`, unchanged but for its channel array being a parameter) and
+plays its own patterns on it (`src/rumble.hpp`), in two banks: one for short events, and one for
+what lasts, a permanent wave started as a stream weapon starts firing or Ratchet lands on a rail,
+and stopped as it stops. The mixer averages the waves on a motor, so a buzz in the same bank as a
+hit would halve it; the two banks and the camera's shake are joined by the stronger instead.
 
 Where the moments come from:
 
@@ -76,7 +79,8 @@ Where the moments come from:
 | Rails | the hero's state (grinding), each tick |
 | Quiet | `play_status`: only in play, not paused, in a menu or a scene |
 
-After each tick the motors get the mix (`set_motors`, every tick while it plays, then 0, 0 once).
+After each tick the motors get the mix (`set_motors`, every tick while it plays, as a command holds
+a fifth of a second; then 0, 0 once).
 
 The game has no hook point at its explosion spawn; explosions reach the rumble through the camera's
 shake, so one out of view (which shakes nothing) does not rumble. A hook point there would be an
@@ -93,13 +97,14 @@ python3 .sdk/openrac-mod-sdk-*/tools/package_mod.py build/package/rumble
 
 ## Credits
 
-The mixer is Ratchet & Clank's, from OpenRAC's [rac1-decomp](https://github.com/OpenRAC/rac1-decomp)
-(GPL-3.0), which adapted it from Lombyte's NTSC-U decompilation (GPL-3.0). The game's memory
-layout and hero states are rac1-decomp's too.
+The mixer is Going Commando's, from OpenRAC's [rac2-decomp](https://github.com/OpenRAC/rac2-decomp)
+(GPL-3.0); it follows Ratchet & Clank's own, which OpenRAC's
+[rac1-decomp](https://github.com/OpenRAC/rac1-decomp) (GPL-3.0) adapted from Lombyte's NTSC-U
+decompilation (GPL-3.0). The game's memory layout and hero states are rac1-decomp's.
 
 ## License
 
-GNU General Public License version 3 ([LICENSE](LICENSE)). The file copied from rac1-decomp is
+GNU General Public License version 3 ([LICENSE](LICENSE)). The files copied from rac2-decomp are
 GPL-3.0-only, as that project gives no later version; the mod's own files are GPL-3.0-or-later.
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) names the source, its commit and the lines copied;
 the package carries it as `LICENSE.THIRD_PARTY_NOTICES.md`.

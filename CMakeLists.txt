@@ -34,7 +34,7 @@ if(MSVC)
   add_compile_definitions(_ALLOW_COMPILER_AND_STL_VERSION_MISMATCH)
 endif()
 
-# Ratchet & Clank's vibration mixer, copied from rac1-decomp (THIRD_PARTY_NOTICES.md).
+# Going Commando's vibration mixer, copied from rac2-decomp (THIRD_PARTY_NOTICES.md).
 set(mixer src/actuator.c)
 
 openrac_add_mod(rumble MANIFEST openrac-mod.json SOURCES src/mod.cpp ${mixer})

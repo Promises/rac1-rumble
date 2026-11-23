@@ -6,10 +6,12 @@
 // hooks report events (a hit taken, a shot, a wrench hit, a kill), each tick reports a Frame (what
 // the game is doing, game.hpp reads it), and tick() answers what to send.
 //
-// The waves play on Ratchet & Clank's own mixer, actuator_CalcPower (actuator.c, copied), in two
-// banks of its eight slots: one for the short events, one for what lasts (a stream weapon held, a
-// rail ground). The mixer averages the waves on a motor; the two banks and the camera's shake are
-// put together by the stronger, so a held flamethrower's low buzz never halves a hit.
+// The waves play on Going Commando's own mixer, LevelActuatorCalcPower (actuator.c, copied; Ratchet
+// & Clank's actuator_CalcPower with permanent channels), in two banks of its eight channels: one
+// for the short events, each wave counting its duration down, and one for what lasts (a stream
+// weapon held, a rail ground), a permanent wave started as it starts and emptied as it stops. The
+// mixer averages the waves on a motor, so a buzz in the events' bank would halve a hit; the two
+// banks and the camera's shake are put together by the stronger instead.
 #pragma once
 
 #include <algorithm>
@@ -21,27 +23,29 @@
 
 namespace rumble {
 
-// The mixer's motors (a wave's f02) and shapes (f00).
+// The mixer's motors (a channel's output) and shapes (its kind).
 constexpr std::uint8_t kSmall = 0;
 constexpr std::uint8_t kLarge = 1;
-enum Shape : std::int16_t { kSquare = 1, kTriangle = 2, kSawUp = 3, kSawDown = 4, kCosine = 5 };
+enum Shape : unsigned char { kSquare = 1, kTriangle = 2, kSawUp = 3, kSawDown = 4, kCosine = 5 };
 
 // The small motor is on or off: on while its mixed value, times the strength, is at least this.
 constexpr int kSmallOn = 96;
 
-// One wave of a pattern, in seconds (made ticks as it starts, at the game's tick).
-//   kind  kPulse: flat at `height` for `length`
-//         kFade: a falling saw from `height` to nothing over `length`
-//         kEase: a half cosine from `height` to nothing over `length` (softer at both ends)
-//         kWobble: a triangle between `floor` and `floor + height`, `period` a cycle, for `length`
+// One wave of a pattern, in seconds (made a channel of ticks as it starts, at the game's tick); the
+// fields after the kind are the channel's own, by their names in Going Commando's (WaveChannel).
+//   kind  kPulse: flat at `amplitude` for `duration`
+//         kFade: a falling saw from `amplitude` to nothing over `duration`
+//         kEase: a half cosine from `amplitude` to nothing over `duration` (softer at both ends)
+//         kLoop: a permanent triangle between `bias` and `bias + amplitude`, `period` a cycle,
+//                until it is stopped (`duration` unused)
 struct Wave {
-    enum Kind : std::uint8_t { kPulse, kFade, kEase, kWobble } kind;
-    std::uint8_t motor;
-    std::uint8_t height;
-    float length;
+    enum Kind : std::uint8_t { kPulse, kFade, kEase, kLoop } kind;
+    std::uint8_t output;
+    std::uint8_t amplitude;
+    float duration;
     float delay = 0.0f;
     float period = 0.0f;
-    std::uint8_t floor = 0;
+    std::uint8_t bias = 0;
 };
 
 // Up to three waves started together.
@@ -50,7 +54,7 @@ struct Pattern {
     int count;
 };
 
-// --- The patterns (seconds; heights 0 to 255) ---
+// --- The patterns (seconds; amplitudes 0 to 255) ---
 
 namespace patterns {
 
@@ -71,13 +75,13 @@ constexpr Pattern kKill{{{{Wave::kFade, kLarge, 120, 0.18f}}}, 1};
 constexpr Pattern kShotLight{{{{Wave::kFade, kLarge, 90, 0.08f}}}, 1};
 constexpr Pattern kShotMedium{{{{Wave::kFade, kLarge, 170, 0.16f}, {Wave::kPulse, kSmall, 255, 0.06f}}}, 2};
 constexpr Pattern kShotHeavy{{{{Wave::kEase, kLarge, 255, 0.35f}, {Wave::kPulse, kSmall, 255, 0.12f}}}, 2};
-// Held weapons, kept up while they fire: the Pyrocitor's roar, the Tesla Claw's crackle, the
-// Morph-o-Ray's hum (a length is set when each starts and stretched as it goes on).
-constexpr Pattern kStreamFlame{{{{Wave::kWobble, kLarge, 35, 0.0f, 0.0f, 0.16f, 45}}}, 1};
-constexpr Pattern kStreamTesla{{{{Wave::kWobble, kLarge, 60, 0.0f, 0.0f, 0.05f, 25}}}, 1};
-constexpr Pattern kStreamBeam{{{{Wave::kWobble, kLarge, 25, 0.0f, 0.0f, 0.30f, 25}}}, 1};
-// On a rail: a low, fast rattle.
-constexpr Pattern kGrind{{{{Wave::kWobble, kLarge, 22, 0.0f, 0.0f, 0.12f, 22}}}, 1};
+// Held weapons, permanent while they fire: the Pyrocitor's roar, the Tesla Claw's crackle, the
+// Morph-o-Ray's hum.
+constexpr Pattern kStreamFlame{{{{Wave::kLoop, kLarge, 35, 0.0f, 0.0f, 0.16f, 45}}}, 1};
+constexpr Pattern kStreamTesla{{{{Wave::kLoop, kLarge, 60, 0.0f, 0.0f, 0.05f, 25}}}, 1};
+constexpr Pattern kStreamBeam{{{{Wave::kLoop, kLarge, 25, 0.0f, 0.0f, 0.30f, 25}}}, 1};
+// On a rail, permanent while he grinds: a low, fast rattle.
+constexpr Pattern kGrind{{{{Wave::kLoop, kLarge, 22, 0.0f, 0.0f, 0.12f, 22}}}, 1};
 
 }  // namespace patterns
 
@@ -97,8 +101,8 @@ inline bool landing_pattern(float descent, float speed, Pattern& out) {
         return false;
     }
     const float t = std::clamp((descent - kHardDescent) / (kFullDescent - kHardDescent), 0.0f, 1.0f);
-    const auto height = static_cast<std::uint8_t>(std::lround(140.0f + 115.0f * t));
-    out = Pattern{{{{Wave::kEase, kLarge, height, 0.22f + 0.25f * t}}}, 1};
+    const auto amplitude = static_cast<std::uint8_t>(std::lround(140.0f + 115.0f * t));
+    out = Pattern{{{{Wave::kEase, kLarge, amplitude, 0.22f + 0.25f * t}}}, 1};
     if (t >= 0.35f) {
         out.waves[1] = Wave{Wave::kPulse, kSmall, 255, 0.08f + 0.08f * t};
         out.count = 2;
@@ -147,67 +151,72 @@ public:
     Bank() { clear(); }
 
     void clear() {
-        for (auto& w : m_slots) {
-            w = L00Entry{};
+        for (auto& c : m_channels) {
+            c = WaveChannel{};
         }
         m_tags.fill(0);
     }
 
-    // Starts `pattern`'s waves, each in a free slot, else in the one with the least left. `tag`
-    // names them for stretch() (0: none).
+    // Starts `pattern`'s waves, each in a free channel, else in the one with the least left (a
+    // permanent one last). `tag` names them for has() and stop() (0: none).
     void start(const Pattern& pattern, float tick, int tag = 0) {
         for (int i = 0; i < pattern.count; ++i) {
-            const int slot = free_slot();
-            m_slots[slot] = entry(pattern.waves[i], tick);
-            m_tags[slot] = tag;
+            const int at = free_channel();
+            m_channels[at] = channel(pattern.waves[i], tick);
+            m_tags[at] = tag;
         }
     }
 
-    // Makes the waves tagged `tag` play for at least `ticks` more; false when none plays.
-    bool stretch(int tag, int ticks) {
-        bool found = false;
-        for (int i = 0; i < ACTUATOR_SLOTS; ++i) {
-            L00Entry& w = m_slots[i];
-            if (!sounds(w) || m_tags[i] != tag) {
-                continue;
-            }
-            found = true;
-            if (static_cast<std::int16_t>(w.f06) < ticks) {
-                w.f06 = static_cast<std::uint16_t>(ticks);
-            }
-            // The phase is an s16: kept within its period so a long hold never wraps it.
-            const int period = w.f0a + w.f0c;
-            if (period > 0) {
-                w.f08 = static_cast<std::int16_t>(w.f08 % period);
+    // Whether a wave tagged `tag` plays.
+    bool has(int tag) const {
+        for (int i = 0; i < WAVE_CHANNELS; ++i) {
+            if (m_tags[i] == tag && sounds(m_channels[i])) {
+                return true;
             }
         }
-        return found;
+        return false;
+    }
+
+    // Empties the channels of the waves tagged `tag`.
+    void stop(int tag) {
+        for (int i = 0; i < WAVE_CHANNELS; ++i) {
+            if (m_tags[i] == tag) {
+                m_channels[i] = WaveChannel{};
+                m_tags[i] = 0;
+            }
+        }
     }
 
     // One tick of the game's mixer over the bank: the small and the large motor's values.
     std::array<int, 2> mix() {
-        // The game's mixer empties a slot on the tick after its last, which sounds nothing but
-        // still counts in its motor's average (a one-tick dip of the others): emptied here first.
-        for (int i = 0; i < ACTUATOR_SLOTS; ++i) {
-            if (!sounds(m_slots[i])) {
-                m_slots[i].f00 = 0;
+        // The game's mixer empties a counted-down channel on the tick after its last, which sounds
+        // nothing but still counts in its motor's average (a one-tick dip of the others): emptied
+        // here first.
+        for (auto& c : m_channels) {
+            if (!sounds(c)) {
+                c.kind = 0;
             }
         }
-        s32 out[2] = {0, 0};
-        actuator_CalcPower(m_slots.data(), out);
-        for (int i = 0; i < ACTUATOR_SLOTS; ++i) {
-            if (m_slots[i].f00 == 0) {
+        int out[2] = {0, 0};
+        LevelActuatorCalcPower(m_channels.data(), out);
+        for (int i = 0; i < WAVE_CHANNELS; ++i) {
+            WaveChannel& c = m_channels[i];
+            if (c.kind == 0) {
                 m_tags[i] = 0;
+            } else if (c.permanent != 0 && c.rise + c.fall > 0) {
+                // A permanent wave's frame (a short) would wrap after nine minutes or so: kept
+                // within its period, which leaves its phase as it is.
+                c.frame = static_cast<short>(c.frame % (c.rise + c.fall));
             }
         }
         return {std::clamp(out[0], 0, 255), std::clamp(out[1], 0, 255)};
     }
 
     bool playing() const {
-        return std::any_of(m_slots.begin(), m_slots.end(), [](const L00Entry& w) { return sounds(w); });
+        return std::any_of(m_channels.begin(), m_channels.end(), [](const WaveChannel& c) { return sounds(c); });
     }
 
-    const std::array<L00Entry, ACTUATOR_SLOTS>& slots() const { return m_slots; }
+    const std::array<WaveChannel, WAVE_CHANNELS>& channels() const { return m_channels; }
 
     // `seconds` as ticks of `tick` seconds, at least 1.
     static int ticks(float seconds, float tick) {
@@ -215,67 +224,70 @@ public:
     }
 
 private:
-    // Whether a slot has ticks left to sound.
-    static bool sounds(const L00Entry& w) { return w.f00 != 0 && static_cast<std::int16_t>(w.f06) > 0; }
+    // Whether a channel has ticks left to sound: a permanent one until it is emptied.
+    static bool sounds(const WaveChannel& c) { return c.kind != 0 && (c.permanent != 0 || c.duration > 0); }
 
-    int free_slot() const {
-        int best = 0;
-        for (int i = 0; i < ACTUATOR_SLOTS; ++i) {
-            if (!sounds(m_slots[i])) {
+    int free_channel() const {
+        int best = -1;
+        for (int i = 0; i < WAVE_CHANNELS; ++i) {
+            const WaveChannel& c = m_channels[i];
+            if (!sounds(c)) {
                 return i;
             }
-            if (static_cast<std::int16_t>(m_slots[i].f06) < static_cast<std::int16_t>(m_slots[best].f06)) {
+            if (c.permanent == 0 && (best < 0 || c.duration < m_channels[best].duration)) {
                 best = i;
             }
         }
-        return best;
+        return best < 0 ? 0 : best;
     }
 
-    // The mixer's slot for `w`. The mixer counts f06 down a tick at a time, the delay's ticks
-    // among them, and the slot sounds while it is above 0 (mix() empties it then); its phase is 1 on
-    // the first tick that sounds.
-    static L00Entry entry(const Wave& w, float tick) {
+    // The mixer's channel for `w`. The mixer counts duration down a tick at a time, the delay's
+    // ticks among them, and the channel sounds while it is above 0 (mix() empties it then); a
+    // permanent channel is never counted down. Its frame is 1 on the first tick that sounds.
+    static WaveChannel channel(const Wave& w, float tick) {
         const int delay = w.delay > 0.0f ? ticks(w.delay, tick) : 0;
-        const int length = ticks(w.length, tick);
-        L00Entry e{};
-        e.f02 = w.motor;
-        e.f04 = static_cast<s16>(delay);
-        e.f06 = static_cast<u16>(delay + length);
-        e.f0e = w.height;
-        e.f0f = w.floor;
+        const int duration = ticks(w.duration, tick);
+        WaveChannel c{};
+        c.output = w.output;
+        c.delay = static_cast<short>(delay);
+        c.duration = static_cast<short>(delay + duration);
+        c.amplitude = w.amplitude;
+        c.bias = w.bias;
         switch (w.kind) {
             case Wave::kPulse:
-                // High for the whole period: phases 1 .. length are all below f0a.
-                e.f00 = kSquare;
-                e.f0a = static_cast<s16>(length + 1);
-                e.f0c = 1;
+                // High for the whole period: frames 1 .. duration are all below rise.
+                c.kind = kSquare;
+                c.rise = static_cast<short>(duration + 1);
+                c.fall = 1;
                 break;
             case Wave::kFade:
-                // height * (length + 1 - phase) / (length + 1): from just under height to a step
-                // above nothing, never back up.
-                e.f00 = kSawDown;
-                e.f0a = 0;
-                e.f0c = static_cast<s16>(length + 1);
+                // amplitude * (duration + 1 - frame) / (duration + 1): from just under amplitude
+                // to a step above nothing, never back up.
+                c.kind = kSawDown;
+                c.rise = 0;
+                c.fall = static_cast<short>(duration + 1);
                 break;
             case Wave::kEase:
-                // (cos(pi * phase / f0c) + 1) / 2 * height, phases 1 .. length of f0c = length + 1.
-                e.f00 = kCosine;
-                e.f0a = 1;
-                e.f0c = static_cast<s16>(length + 1);
+                // (cos(pi * frame / fall) + 1) / 2 * amplitude, frames 1 .. duration of
+                // fall = duration + 1.
+                c.kind = kCosine;
+                c.rise = 1;
+                c.fall = static_cast<short>(duration + 1);
                 break;
-            case Wave::kWobble: {
+            case Wave::kLoop: {
                 const int half = std::max(1, ticks(w.period, tick) / 2);
-                e.f00 = kTriangle;
-                e.f0a = static_cast<s16>(half);
-                e.f0c = static_cast<s16>(half);
+                c.kind = kTriangle;
+                c.permanent = 1;
+                c.rise = static_cast<short>(half);
+                c.fall = static_cast<short>(half);
                 break;
             }
         }
-        return e;
+        return c;
     }
 
-    std::array<L00Entry, ACTUATOR_SLOTS> m_slots{};
-    std::array<int, ACTUATOR_SLOTS> m_tags{};
+    std::array<WaveChannel, WAVE_CHANNELS> m_channels{};
+    std::array<int, WAVE_CHANNELS> m_tags{};
 };
 
 // --- The rumble ---
@@ -325,10 +337,10 @@ constexpr float kShakeFloor = 0.005f;
 constexpr float kShakeFull = 0.15f;
 constexpr float kShakeKick = 0.12f;
 
-// A stream weapon's rumble lasts this long after its last shot unless the game takes ammo again
-// sooner: the game takes it every few ticks while the trigger is held (the Pyrocitor's interval is a
-// level variable), so the hold is stretched to 1.5 times the gap seen between two takes, within
-// these bounds.
+// A stream weapon has no event for its trigger let go: the game takes its ammo every few ticks while
+// it fires (the Pyrocitor's interval is a level variable). Its permanent wave stops when no take came
+// for 1.5 times the gap seen between the last two, within these bounds (kStreamHoldFirst after the
+// first take).
 constexpr float kStreamHoldFirst = 0.30f;
 constexpr float kStreamHoldMin = 0.15f;
 constexpr float kStreamHoldMax = 0.60f;
@@ -414,9 +426,9 @@ public:
         }
         if (!m_dead) {
             land(frame);
-            if (frame.grinding && m_settings.grind && !m_continuous.stretch(kGrindTag, 2)) {
-                m_continuous.start(patterns::kGrind, m_tick, kGrindTag);
-                m_continuous.stretch(kGrindTag, 2);
+            grind(frame.grinding && m_settings.grind);
+            if (m_stream_item >= 0 && (!m_settings.weapons || m_ticks - m_stream_tick > m_stream_hold)) {
+                end_stream();
             }
         }
         const auto events = m_events.mix();
@@ -464,6 +476,20 @@ private:
         m_stream_item = -1;
     }
 
+    // The rail's permanent rattle on or off.
+    void grind(bool on) {
+        if (on && !m_continuous.has(kGrindTag)) {
+            m_continuous.start(patterns::kGrind, m_tick, kGrindTag);
+        } else if (!on) {
+            m_continuous.stop(kGrindTag);
+        }
+    }
+
+    void end_stream() {
+        m_continuous.stop(kStreamTag + m_stream_item);
+        m_stream_item = -1;
+    }
+
     // 0, 0 once after motors that were on; nothing after that.
     Motors stop() {
         Motors out;
@@ -495,21 +521,21 @@ private:
         m_peak = 0.0f;
     }
 
+    // A take of a stream weapon's ammo: its permanent wave started if it is not playing (one held
+    // weapon at a time), and how long until it stops without another.
     void stream(std::int32_t item, const Pattern& pattern) {
         float hold = kStreamHoldFirst;
         if (item == m_stream_item) {
             const float gap = static_cast<float>(m_ticks - m_stream_tick) * m_tick;
-            if (gap <= kStreamHoldMax) {
-                hold = std::clamp(gap * 1.5f, kStreamHoldMin, kStreamHoldMax);
-            }
+            hold = std::clamp(gap * 1.5f, kStreamHoldMin, kStreamHoldMax);
+        } else if (m_stream_item >= 0) {
+            end_stream();
         }
         m_stream_item = item;
         m_stream_tick = m_ticks;
-        const int tag = kStreamTag + item;
-        const int ticks = Bank::ticks(hold, m_tick);
-        if (!m_continuous.stretch(tag, ticks)) {
-            m_continuous.start(pattern, m_tick, tag);
-            m_continuous.stretch(tag, ticks);
+        m_stream_hold = static_cast<std::uint32_t>(Bank::ticks(hold, m_tick));
+        if (!m_continuous.has(kStreamTag + item)) {
+            m_continuous.start(pattern, m_tick, kStreamTag + item);
         }
     }
 
@@ -525,9 +551,10 @@ private:
     bool m_air = false;
     float m_descent = 0.0f;
     float m_peak = 0.0f;
-    // The last stream weapon's take of ammo.
+    // The stream weapon playing (-1: none), its last take of ammo and the ticks it holds after one.
     std::int32_t m_stream_item = -1;
     std::uint32_t m_stream_tick = 0;
+    std::uint32_t m_stream_hold = 0;
 };
 
 }  // namespace rumble

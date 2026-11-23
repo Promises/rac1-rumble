@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  *
- * Copied from rac1-decomp (OpenRAC/rac1-decomp, GPL-3.0), src/game/gameplay/actuator.c at commit
- * f911d6e4b9711071f0daaad95b4a04c2c8aa3c61, lines 19-128: actuator_CalcPower, the vibration
- * mixer of Ratchet & Clank (PAL text 0x1E9080-0x1E94E8), which rac1-decomp adapted from Lombyte's
- * NTSC decompilation (GPL-3.0): src/overlays/shared/start_001eaa08.c, FUN_L00_001eaa08.
+ * Copied from rac2-decomp (OpenRAC/rac2-decomp, GPL-3.0), src/levels/shared/L00_002D67A8-envelope.c
+ * at commit 4ea93ceaf43aec055e19211d36512e847860bac2, lines 16-117: LevelActuatorCalcPower, the
+ * vibration mixer of Ratchet & Clank: Going Commando (USA v1.01, in the levels' shared code),
+ * which follows Ratchet & Clank's actuator_CalcPower (rac1-decomp, adapted from Lombyte's
+ * decompilation, GPL-3.0) and adds permanent channels.
  *
- * Unchanged but for the lines marked (rac1-rumble): the wave array, the game's global there, is a
+ * Unchanged but for the line marked (rac1-rumble): the channel array, the game's global there, is a
  * parameter of the same name here, and the game's math helpers are the C library's (below).
  * THIRD_PARTY_NOTICES.md has the details.
  */
@@ -13,119 +14,112 @@
 
 #include "actuator.h"
 
-/* (rac1-rumble) The game's helpers: IntToFloat converts, truncate_float_to_s32 truncates toward 0,
- * FastCos is the game's table cosine (here the C library's, as exact or better). */
-#define IntToFloat(x) ((f32)(x))
-#define truncate_float_to_s32(x) ((s32)(x))
-#define FastCos(x) cosf(x)
+/* (rac1-rumble) The game's helpers: IntToFloat converts, FloatToInt truncates toward 0,
+ * math_fast_sin_or_cos_a is the game's table cosine here (Ratchet & Clank's FastCos in the same
+ * place), the C library's cosf as exact or better. */
+#define IntToFloat(x) ((float)(x))
+#define FloatToInt(x) ((int)(x))
+#define math_fast_sin_or_cos_a(x) cosf(x)
 
-/* Adapted from Lombyte's project (GPL-3.0) for PAL by OpenRAC's tools/port.py: src/overlays/shared/start_001eaa08.c, FUN_L00_001eaa08. */
-s32 actuator_CalcPower(L00Entry *actuator_wave, s32 *p1) { /* (rac1-rumble) the array a parameter */
-    s32 aa[3][4];
-    s32 *q2;
-    s32 *q1;
-    s32 i;
-    s32 count;
+/* Mixes the eight active wave channels into two output values, one per output. Returns how many channels are in use. */
+int LevelActuatorCalcPower(WaveChannel *g_wave_l00_channels, int *out) /* (rac1-rumble) the array a parameter */
+{
+    int scratch[3][4];
+    int *outputCount;
+    int *multiplyCount;
+    int i, active = 0;
 
-    count = 0;
-    q1 = aa[1];
-    q2 = aa[2];
+    multiplyCount = scratch[1];
+    outputCount = scratch[2];
     for (i = 0; i < 2; i++) {
-        p1[i] = 0;
-        aa[0][i] = 0;
-        aa[1][i] = 0;
-        aa[2][i] = 0;
+        out[i] = 0;
+        scratch[0][i] = 0;
+        scratch[1][i] = 0;
+        scratch[2][i] = 0;
     }
     for (i = 0; i < 8; i++) {
-        L00Entry *e;
-        s32 rem;
-        s32 res;
-        u16 v;
+        WaveChannel *channel;
+        int phase, value;
 
-        if (actuator_wave[i].f00 == 0) {
+        if (!g_wave_l00_channels[i].kind)
+            continue;
+        active++;
+        if (!g_wave_l00_channels[i].permanent) {
+            if (g_wave_l00_channels[i].duration-- <= 0)
+                g_wave_l00_channels[i].kind = 0;
+        }
+        if (g_wave_l00_channels[i].delay) {
+            g_wave_l00_channels[i].delay--;
             continue;
         }
-        e = &actuator_wave[i];
-        count++;
-        v = actuator_wave[i].f06;
-        actuator_wave[i].f06 = v - 1;
-        if ((s16)v <= 0) {
-            e->f00 = 0;
-        }
-        if (actuator_wave[i].f04 != 0) {
-            actuator_wave[i].f04 = actuator_wave[i].f04 - 1;
-            continue;
-        }
-        res = 0;
-        actuator_wave[i].f08++;
-        rem = e->f08 % (e->f0a + e->f0c);
-        switch (e->f00) {
-            case 0:
-                break;
-            case 1:
-                if (rem < e->f0a) {
-                    res = e->f0e + e->f0f;
-                } else {
-                    res = e->f0f;
-                }
-                break;
-            case 2:
-                if (rem < e->f0a) {
-                    res = (e->f0e * rem) / e->f0a;
-                } else {
-                    res = (e->f0e * (e->f0c + e->f0a - rem)) / e->f0c;
-                }
-                res = res + e->f0f;
-                break;
-            case 3:
-                if (rem < e->f0a) {
-                    res = (e->f0e * rem) / e->f0a + e->f0f;
-                }
-                break;
-            case 4:
-                if (rem >= e->f0a) {
-                    res = (e->f0e * (e->f0c + e->f0a - rem)) / e->f0c + e->f0f;
-                }
-                break;
-            case 5: {
-                f32 f;
-                f32 g;
-                if (rem < e->f0c) {
-                    f = IntToFloat(rem) * 3.1415927f / IntToFloat(e->f0c);
-                } else {
-                    f = 3.1415927f - IntToFloat(rem - e->f0c) * 3.1415927f / IntToFloat(e->f0a);
-                }
-                f = FastCos(f);
-                g = IntToFloat(e->f0e);
-                res = truncate_float_to_s32((f * g + g) * 0.5f) + e->f0f;
-                if (res >= 256) {
-                    res = 255;
-                }
-                break;
-            }
-        }
-        if (e->f03 != 0) {
-            aa[0][e->f02] = aa[0][e->f02] + res;
+        channel = &g_wave_l00_channels[i];
+        g_wave_l00_channels[i].frame++;
+        value = 0;
+        phase = channel->frame % (channel->rise + channel->fall);
+        switch (channel->kind) {
+        case 0:
+            break;
+        case 1:
+            if (phase < channel->rise)
+                value = channel->amplitude + channel->bias;
+            else
+                value = channel->bias;
+            break;
+        case 2:
+            if (phase < channel->rise)
+                value = channel->amplitude * phase / channel->rise;
+            else
+                value = channel->amplitude * (channel->fall + channel->rise - phase) / channel->fall;
+            value += channel->bias;
+            break;
+        case 3:
+            if (phase < channel->rise)
+                value = channel->amplitude * phase / channel->rise + channel->bias;
+            break;
+        case 4:
+            if (phase >= channel->rise)
+                value = channel->amplitude * (channel->fall + channel->rise - phase) / channel->fall + channel->bias;
+            break;
+        case 5: {
+            float angle;
+
+            if (phase < channel->fall)
+                angle = IntToFloat(phase) * 3.1415927f / IntToFloat(channel->fall);
+            else
+                angle = 3.1415927f - IntToFloat(phase - channel->fall) * 3.1415927f / IntToFloat(channel->rise);
+            angle = math_fast_sin_or_cos_a(angle);
             {
-                s32 *t = q1 + e->f02;
-                *t = *t + 1;
+                float a = IntToFloat(channel->amplitude);
+                value = FloatToInt((angle * a + a) * 0.5f) + channel->bias;
+            }
+            if (value > 255)
+                value = 255;
+            break;
+        }
+        }
+        if (channel->multiply) {
+            scratch[0][channel->output] += value;
+            {
+                int *p = multiplyCount + channel->output;
+                *p = *p + 1;
             }
         } else {
-            p1[e->f02] = p1[e->f02] + res;
+            out[channel->output] += value;
             {
-                s32 *t = q2 + e->f02;
-                *t = *t + 1;
+                int *p = outputCount + channel->output;
+                *p = *p + 1;
             }
         }
     }
     for (i = 0; i < 2; i++) {
-        if (q2[i] != 0) {
-            p1[i] = p1[i] / q2[i];
-        }
-        if (q1[i] != 0) {
-            aa[0][i] = aa[0][i] / q1[i];
-            p1[i] = (p1[i] * aa[0][i]) / 255;
+        int j = i;
+
+        if (outputCount[j])
+            out[j] /= outputCount[j];
+        if (multiplyCount[j]) {
+            scratch[0][j] /= multiplyCount[j];
+            out[j] = out[j] * scratch[0][j] / 255;
         }
     }
-    return count;
+    return active;
 }

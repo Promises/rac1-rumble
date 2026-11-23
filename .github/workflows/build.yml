@@ -72,7 +72,7 @@ jobs:
       matrix:
         include:
           # Visual Studio's environment, x64, with Ninja in it (Set up MSVC below). Visual Studio's
-          # clang-cl compiles the C copied from Ratchet & Clank's decompilation (src/actuator.c) and
+          # clang-cl compiles the C copied from Going Commando's decompilation (src/actuator.c) and
           # the C++ alike (CMake refuses clang-cl for one language and another frontend for the
           # other). It links with Visual Studio's link, as cl's builds do.
           - name: windows-x86_64

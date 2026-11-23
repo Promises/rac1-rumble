@@ -145,35 +145,51 @@ void test_mixer_averages_a_motor() {
 
 void test_mixer_full_bank_takes_the_shortest() {
     rumble::Bank bank;
-    for (int i = 0; i < ACTUATOR_SLOTS; ++i) {
-        bank.start(rumble::Pattern{{{{rumble::Wave::kPulse, rumble::kLarge, 10, 0.1f + 0.1f * i}}}, 1}, kTick);
+    // A permanent wave first, then seven that count down: the shortest of those goes, not it.
+    bank.start(rumble::patterns::kGrind, kTick, 7);
+    for (int i = 1; i < WAVE_CHANNELS; ++i) {
+        bank.start(rumble::Pattern{{{{rumble::Wave::kPulse, rumble::kLarge, 10, 0.1f * i}}}, 1}, kTick);
     }
     bank.start(rumble::Pattern{{{{rumble::Wave::kPulse, rumble::kLarge, 250, 1.0f}}}, 1}, kTick);
     int found = 0;
     int shortest = 1000;
-    for (const auto& w : bank.slots()) {
-        found += w.f0e == 250 ? 1 : 0;
-        shortest = std::min(shortest, static_cast<int>(static_cast<std::int16_t>(w.f06)));
+    for (const auto& c : bank.channels()) {
+        found += c.amplitude == 250 ? 1 : 0;
+        if (c.permanent == 0) {
+            shortest = std::min(shortest, static_cast<int>(c.duration));
+        }
     }
     check(found == 1, "a full bank still starts a new wave");
     check(shortest == 10, "in place of the one with the least left (0.1 s: 5 ticks, gone)");
+    check(bank.has(7), "a permanent wave is never the one taken");
 }
 
-void test_mixer_stretch_keeps_the_phase_small() {
+void test_mixer_permanent_plays_until_stopped() {
     rumble::Bank bank;
     bank.start(rumble::patterns::kGrind, kTick, 7);
-    for (int i = 0; i < 40000; ++i) {
-        check(bank.stretch(7, 2), "a held wave stretches");
-        bank.mix();
-        if (failures != 0) {
-            return;
+    // Ten minutes at 50 ticks a second: past a short's range of frames.
+    bool sounding = true;
+    for (int i = 0; i < 30000; ++i) {
+        sounding = sounding && bank.mix()[rumble::kLarge] >= rumble::patterns::kGrind.waves[0].bias;
+    }
+    check(sounding && bank.has(7) && bank.playing(), "a permanent wave keeps going, never counted down");
+    for (const auto& c : bank.channels()) {
+        if (c.kind != 0) {
+            check(c.permanent != 0 && c.frame >= 0 && c.frame <= c.rise + c.fall, "its frame never wraps");
         }
     }
-    for (const auto& w : bank.slots()) {
-        if (w.f00 != 0) {
-            check(w.f08 >= 0 && w.f08 <= w.f0a + w.f0c, "a long hold never wraps the phase");
-        }
+    bank.stop(7);
+    check(!bank.has(7) && !bank.playing() && bank.mix()[rumble::kLarge] == 0, "stopped, it is gone at once");
+}
+
+void test_mixer_counted_wave_ends() {
+    rumble::Bank bank;
+    bank.start(rumble::Pattern{{{{rumble::Wave::kFade, rumble::kLarge, 200, 0.1f}}}, 1}, kTick, 3);
+    check(bank.channels()[0].permanent == 0 && bank.channels()[0].duration == 5, "a fade counts 5 ticks down");
+    for (int i = 0; i < 5; ++i) {
+        check(bank.mix()[rumble::kLarge] > 0, "and sounds for them");
     }
+    check(!bank.has(3) && !bank.playing(), "then it is gone by itself");
 }
 
 // --- The rumble ---
@@ -376,7 +392,7 @@ void test_grind() {
     }
     check(on == 120, "a rail rattles each tick");
     const Run tail = run(r, play());
-    check(tail.stopped && tail.on <= 3, "off the rail it stops, and no landing thud from the rail");
+    check(tail.stopped && tail.on == 0, "off the rail it stops at once, and no landing thud from the rail");
 }
 
 // A fall of `ticks` ticks at `speed` units a second, then a landing in `landed`.
@@ -412,7 +428,7 @@ void test_landings() {
     rumble::Pattern p{};
     check(!rumble::landing_pattern(0.5f, 40.0f, p), "under 0.6 s down: no thud");
     check(rumble::landing_pattern(0.6f, 12.0f, p) && p.count == 1, "at the edge: a light thud, large motor only");
-    check(rumble::landing_pattern(1.5f, 20.0f, p) && p.count == 2 && p.waves[0].height == 255,
+    check(rumble::landing_pattern(1.5f, 20.0f, p) && p.count == 2 && p.waves[0].amplitude == 255,
           "a full one: both motors");
 }
 
@@ -523,7 +539,8 @@ int main() {
     test_mixer_delay_waits_and_averages_only_what_plays();
     test_mixer_averages_a_motor();
     test_mixer_full_bank_takes_the_shortest();
-    test_mixer_stretch_keeps_the_phase_small();
+    test_mixer_permanent_plays_until_stopped();
+    test_mixer_counted_wave_ends();
     test_every_pattern_ends();
     test_sends_every_tick_then_stops_once();
     test_heavier_hits_are_stronger();
