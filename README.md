@@ -1,5 +1,7 @@
 # Rumble
 
+![Rumble](docs/banner.png)
+
 A native mod for [OpenRAC](https://github.com/OpenRAC/OpenRAC)'s port of Ratchet & Clank:
 **controller rumble in the style of Going Commando**. Ratchet & Clank has a vibration mixer, but the
 retail game never drives the pad's motors; Going Commando does, for hits, hard landings, explosions
